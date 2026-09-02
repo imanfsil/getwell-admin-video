@@ -1,6 +1,6 @@
-# Getwell Admin — product launch film
+# Getwell Admin — project presentation film
 
-A Remotion project that renders a **52-second promotional film** for the
+A Remotion project that renders a **52-second project presentation film** for the
 Getwell Weight Loss Admin web app, with an original score and sound design.
 
 * Output: `out/getwell-admin-promo.mp4`
@@ -49,22 +49,21 @@ lift a nested folder to the root if that is what went wrong.
 
 ## The story
 
-Ten scenes, cut to a 120 BPM score — every transition, impact and reveal lands
-on a beat.
+Ten scenes, cut to the same 120 BPM score. The visuals, UI walkthrough and motion remain unchanged; the narrative now frames the film as a project I designed and built around an observed workflow problem.
 
 | Time | Scene | What happens |
 |------|-------|--------------|
-| 0:00–0:03 | **Problem** | "Every patient is a **hundred details.**" Fragments of a clinic's day — patient rows, appointment cards, sticky notes, WhatsApp messages, spreadsheet pages, missed-visit alerts — start flying in and piling up. |
-| 0:03–0:06 | | "And every one of them lives **somewhere else.**" The pile keeps growing and starts to blur. |
-| 0:06–0:12 | **Pain** | Three hits, one every two seconds, with an RGB-split glitch on each: "Too many patients." · "Too much data." · "Too much to miss." The screen turns red-hot, the cards jitter, then everything is sucked into the centre. |
-| 0:12–0:16 | **Solution** | Impact, white flash, silence-then-drop. The logo lands, "Meet Getwell **Admin.**", and the application flies in through 3D perspective with a light sweep across the glass. |
-| 0:16–0:21 | **Dashboard** | "Everything you need. In **one place.**" KPI cards land one by one, counters run up, the cursor hovers *Due follow-up* and it pulses. |
-| 0:21–0:26 | **Patients** | Camera slides the window right and the copy takes the left. The cursor clicks the search field, types "Nurul", the list filters and the matching row lights up. |
-| 0:26–0:32 | **Patient profile** | The camera pushes in. Weight chart draws itself, body-composition lines cross, current weight / total loss / BMI / visits count up, and the total-loss tile pulses green on completion. |
-| 0:32–0:37 | **Appointments** | "**Never miss** a follow-up again." Today's schedule populates, *No show* flashes amber, an overdue follow-up row is ringed in red and *Follow Up Now* pulses. |
-| 0:37–0:41 | **Reports** | "Turn patient data into **better decisions.**" Revenue bars grow, panel claims fill in, the claims-settled ring sweeps to 84%. |
-| 0:41–0:46 | **One system** | The camera pulls all the way back and the single window becomes five, fanned out in 3D. "Manage. · Track. · Follow up. · Grow." |
-| 0:46–0:52 | **Brand** | The product settles behind the wordmark. "Getwell Admin" · "Smarter weight loss management." · "Built for smarter weight loss care." |
+| 0:00–0:03 | **Problem** | “Every patient comes with a hundred details.” The fragments of patient records, appointments, notes, messages, spreadsheets and alerts show the information being handled across different places. |
+| 0:03–0:06 | | “I found those details across different places.” |
+| 0:06–0:12 | **Workflow pain** | “Too many places.” · “Too many steps.” · “Too much to keep track of.” The visual pressure builds exactly as before. |
+| 0:12–0:16 | **Build** | “So I built Getwell Admin.” The same impact reveal and application entrance are retained, followed by “I wanted one workflow, shaped around how the team actually works.” |
+| 0:16–0:21 | **Dashboard** | “I started with one clear overview.” The existing dashboard walkthrough, counters and focus treatment remain unchanged. |
+| 0:21–0:26 | **Patients** | “I created a central patient list.” The same search interaction demonstrates finding a patient quickly. |
+| 0:26–0:32 | **Patient profile** | “I structured each profile around key information.” The existing progress, body-composition and visit visuals remain unchanged. |
+| 0:32–0:37 | **Appointments** | “I added tracking for visits, missed visits, and follow-ups.” The same appointment and follow-up interactions remain. |
+| 0:37–0:41 | **Reports** | “I included reports for revenue and panel claims.” The existing report visuals remain unchanged. |
+| 0:41–0:46 | **One workflow** | “Built around the workflow.” · “I built the system around the workflow.” The same multi-window fan-out is retained. |
+| 0:46–0:52 | **Closing** | The same brand composition closes on “A workflow I designed from a real operational problem.” followed by “From scattered details to one connected workflow.” |
 
 A chapter bar runs along the bottom for the whole film — **The problem ·
 The solution · Inside Getwell · Getwell Admin** — with a live progress strip.
@@ -80,7 +79,7 @@ page slides and blurs out while the new one slides in behind a loading bar),
 animated cursor with click ripples, number counters, self-drawing charts, glow
 pulses, light sweeps, drifting particles and film grain.
 
-There is **one** application window for the whole product act. The camera moves
+There is **one** application window for the whole application walkthrough. The camera moves
 around it and the pages change inside it, which is what makes it read as
 somebody using the software rather than a slideshow of screenshots.
 
@@ -94,7 +93,7 @@ to license, nothing to attribute and no watermark.
 
 * **Score** — original 120 BPM piece in A minor. Six bars of tension (low
   drone, a clock tick that speeds up, glitch stabs, a riser), the drop at 0:12,
-  a full groove through the product tour with the arrangement changing at every
+  a full groove through the application walkthrough with the arrangement changing at every
   scene, and a lift for the closing brand moment.
 * **Sound design** — around 140 individual effects: whooshes, notification
   dings, keyboard taps, UI pops, clicks, counter ticks, digital glitches,
