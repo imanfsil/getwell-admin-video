@@ -47,7 +47,8 @@ jobs:
         run: |
           missing=0
           for f in package.json tsconfig.json remotion.config.ts \
-                   src/index.ts src/Root.tsx src/GetwellAdminPromo.tsx; do
+                   src/index.ts src/Root.tsx src/GetwellAdminPromo.tsx \
+                   public/audio/soundtrack.mp3; do
             if [ -f "$f" ]; then
               echo "  OK       $f"
             else
@@ -59,7 +60,8 @@ jobs:
             echo ""
             echo "::error::Project files are missing from this repository. Upload EVERY"
             echo "::error::file and folder from the ZIP to the ROOT of the repo, so that"
-            echo "::error::package.json and the src folder sit side by side at the top level."
+            echo "::error::package.json, src/ and public/ sit side by side at the top level."
+            echo "::error::public/audio holds the soundtrack - the render needs it."
             exit 1
           fi
           echo "All required files are present."
