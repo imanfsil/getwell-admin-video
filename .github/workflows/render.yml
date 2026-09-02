@@ -1,0 +1,84 @@
+name: Render Getwell Video
+
+on:
+  workflow_dispatch:
+
+jobs:
+  render:
+    name: Render Getwell Admin Promo
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Locate the project files
+        shell: bash
+        run: |
+          set -e
+          echo "Repository root contains:"
+          ls -la
+
+          # If the ZIP itself was committed, unpack it.
+          if [ ! -f src/index.ts ]; then
+            for z in *.zip; do
+              [ -e "$z" ] || continue
+              echo "Extracting $z"
+              unzip -o -q "$z"
+            done
+          fi
+
+          # If the project was uploaded inside a sub-folder, lift it to the root.
+          if [ ! -f src/index.ts ]; then
+            hit=$(find . -path ./node_modules -prune -o -type f -path '*/src/index.ts' -print 2>/dev/null | head -1 || true)
+            if [ -n "$hit" ]; then
+              nested=$(dirname "$(dirname "$hit")")
+              if [ "$nested" != "." ]; then
+                echo "Found the project in '$nested' - moving it to the repository root"
+                shopt -s dotglob
+                cp -r "$nested"/* . || true
+              fi
+            fi
+          fi
+
+      - name: Check that every required file is present
+        shell: bash
+        run: |
+          missing=0
+          for f in package.json tsconfig.json remotion.config.ts \
+                   src/index.ts src/Root.tsx src/GetwellAdminPromo.tsx; do
+            if [ -f "$f" ]; then
+              echo "  OK       $f"
+            else
+              echo "  MISSING  $f"
+              missing=1
+            fi
+          done
+          if [ "$missing" = "1" ]; then
+            echo ""
+            echo "::error::Project files are missing from this repository. Upload EVERY"
+            echo "::error::file and folder from the ZIP to the ROOT of the repo, so that"
+            echo "::error::package.json and the src folder sit side by side at the top level."
+            exit 1
+          fi
+          echo "All required files are present."
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Render video
+        run: npm run render
+
+      - name: Upload MP4
+        uses: actions/upload-artifact@v4
+        with:
+          name: getwell-admin-promo
+          path: out/getwell-admin-promo.mp4
+          if-no-files-found: error
+          retention-days: 30
