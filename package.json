@@ -1,7 +1,7 @@
 {
   "name": "getwell-admin-promo",
   "version": "1.0.0",
-  "description": "Remotion project for a 52-second Getwell Admin project presentation film.",
+  "description": "Remotion project that renders the Getwell Admin promotional video (1920x1080, 30fps, ~45s).",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
