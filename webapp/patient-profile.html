@@ -1,0 +1,2532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Patient Profile | Getwell</title>
+<link rel="stylesheet" href="styles.css?v=20260831-bodycomp">
+<script src="app.js?v=20260831-bodycomp"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!--
+  jsPDF builds the progress report. Tesseract is NOT loaded
+  here: the Arboleaf exports this clinic uses are page images
+  with no text layer, so OCR is needed, but it is a large
+  download and is fetched only the first time a scanned report
+  is actually uploaded (see getwellLoadOcrEngine).
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<div class="modal-wrap" id="patientPhotoModal">
+  <div class="modal" style="width:min(520px,96vw)">
+    <div class="modal-head">
+      <div><h2>Profile Photo</h2><p id="patientPhotoSub"></p></div>
+      <button class="modal-close" type="button" aria-label="Close" onclick="closePatientPhoto()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="photo-row">
+        <div class="patient-photo-preview" data-patient-photo-preview></div>
+        <div class="photo-actions">
+          <label class="secondary file-button">
+            Change photo
+            <input type="file" id="patientPhotoInput" accept="image/*" hidden onchange="handlePatientPhoto(this)">
+          </label>
+          <button class="secondary" type="button" data-patient-photo-remove onclick="removePatientPhoto()">Remove photo</button>
+          <div class="photo-status" data-patient-photo-status></div>
+        </div>
+      </div>
+
+      <p class="photo-hint">
+        The photo is uploaded to the existing <strong>Getwell Patient Files</strong>
+        folder in Google Drive. Only the Drive file ID and link are saved with the
+        patient record &mdash; the image itself is never stored in Google Sheets.
+        If Drive is unreachable the photo is kept on this device and clearly badged.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <button class="secondary" type="button" onclick="closePatientPhoto()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="editPatientModal">
+  <div class="modal">
+    <div class="modal-head"><div><h2>Edit Patient</h2><p>Update patient information.</p></div><button class="modal-close" onclick="closeEditPatient()">×</button></div>
+    <div class="modal-body">
+
+      <div class="visit-section-title">Profile Photo</div>
+
+      <div class="photo-row">
+        <div class="patient-photo-preview" data-patient-photo-preview></div>
+        <div class="photo-actions">
+          <label class="secondary file-button">
+            Change photo
+            <input type="file" id="editPatientPhotoInput" accept="image/*" hidden onchange="handlePatientPhoto(this)">
+          </label>
+          <button class="secondary" type="button" data-patient-photo-remove onclick="removePatientPhoto()">Remove photo</button>
+          <div class="photo-status" data-patient-photo-status></div>
+        </div>
+      </div>
+
+      <p class="photo-hint">
+        The photo is uploaded to the existing <strong>Getwell Patient Files</strong>
+        folder in Google Drive. Only the Drive file ID and link are saved with the
+        patient record &mdash; the image itself is never stored in Google Sheets.
+        If Drive is unreachable the photo is kept on this device and clearly badged.
+      </p>
+
+      <div class="visit-section-title">Patient Details</div>
+
+      <div class="form-grid">
+        <div class="form-group"><label>Full Name</label><input id="editName"></div>
+        <div class="form-group"><label>Patient ID</label><input id="editPatientId" readonly></div>
+        <div class="form-group"><label>Phone</label><input id="editPhone"></div>
+        <div class="form-group"><label>Date of Birth</label><input id="editDob" type="date"></div>
+        <div class="form-group"><label>Gender</label><select id="editGender"><option value="">Select</option><option>Male</option><option>Female</option></select></div>
+        <div class="form-group"><label>Height (cm)</label><input id="editHeight" type="number"></div>
+        <div class="form-group"><label>Starting Weight (kg)</label><input id="editStartingWeight" type="number"></div>
+        <div class="form-group"><label>Goal Weight (kg)</label><input id="editGoalWeight" type="number"></div>
+        <div class="form-group"><label>Program Start Date</label><input id="editStartDate" type="date"></div>
+        <div class="form-group"><label>Panel / Payment</label><select id="editPanel"></select></div>
+        <div class="form-group"><label>Insurance / Panel Status</label><select id="editPanelStatus"><option value="Active">Active</option><option value="Suspended">Suspended</option></select></div>
+        <div class="form-group full"><label>Suspension / Claim Hold Notes</label><textarea id="editPanelSuspensionNote"></textarea></div>
+        <div class="form-group"><label>Doctor</label><select id="editDoctor"></select></div>
+        <div class="form-group"><label>Status</label><select id="editStatus"></select></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="secondary" onclick="closeEditPatient()">Cancel</button><button class="secondary" onclick="deletePatientRecord()">Delete</button><button class="primary" onclick="savePatientChanges()">Save Changes</button></div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="visitModal">
+  <div class="modal" style="width:min(1000px,96vw)">
+    <div class="modal-head"><div><h2 id="visitModalTitle">Add Visit</h2><p id="visitModalSub"></p></div><button class="modal-close" onclick="closeVisit()">×</button></div>
+    <div class="modal-body">
+      <div class="visit-section-title">Visit Information</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Visit Date</label><input id="vDate" type="date"></div>
+        <div class="form-group"><label>Visit Number</label><input id="vNumber"></div>
+        <div class="form-group full"><label>Visit Type</label><select id="vType"></select></div>
+        <div class="form-group"><label>Weight (kg)</label><input id="vWeight" type="number"></div>
+        <div class="form-group"><label>Invoice Reference</label><input id="vInvoiceRef"></div>
+      </div>
+
+      <div class="visit-section-title">Arboleaf Body Composition</div>
+      <div class="form-group">
+        <label>Arboleaf PDF</label>
+        <input id="vPdf" type="file" accept="application/pdf" onchange="handleArboleafFile(this)">
+        <div id="existingPdf" class="row-sub" style="margin-top:6px"></div>
+        <div id="pdfReadStatus" class="badge gray" style="margin-top:8px">No PDF selected.</div>
+      </div>
+
+      <!--
+        THE REVIEW GRID
+
+        Arboleaf exports its report as page images, so the
+        figures are recovered by OCR and OCR of a screenshot is
+        good but not perfect. Every value therefore lands here
+        first, editable, and what is saved with the visit is
+        what these boxes hold - not what the reader guessed.
+
+        It also works with no PDF at all: a visit whose report
+        is on paper can simply be typed in.
+      -->
+      <div class="arb-review" id="arboleafReview">
+        <div class="arb-review-head">
+          <div>
+            <strong>Body composition measurements</strong>
+            <span id="arboleafReviewNote">Upload a report to read it, or type the values in.</span>
+          </div>
+          <button class="secondary" type="button" id="arboleafExtraToggle"
+                  onclick="toggleArboleafExtras()">Show additional values</button>
+        </div>
+        <div class="arb-grid" id="arboleafGrid"></div>
+        <div class="arb-grid arb-grid-extra" id="arboleafGridExtra" hidden></div>
+      </div>
+
+      <div class="visit-section-title">Visit Charges & Payment</div>
+      <div id="chargeBuilder"></div>
+      <div class="finance-card" style="margin-top:10px"><div class="label">VISIT TOTAL</div><div class="value" id="vTotal">RM 0.00</div></div>
+
+      <div class="visit-section-title">Payment Allocation</div>
+      <div class="claim-grid">
+        <div class="form-group"><label id="panelLabel">Panel / Insurance</label><input class="claim-input" id="vPanel" type="number" min="0" step="0.01"></div>
+        <div class="form-group"><label>Self-Pay / Co-Payment</label><input class="claim-input" id="vSelf" type="number" min="0" step="0.01"></div>
+      </div>
+      <div id="vValidation" class="badge gray">Enter charges.</div>
+
+      <div class="visit-section-title">Photos</div>
+      <div class="form-group">
+        <label>Upload visit / before-after photos</label>
+        <input id="vPhotos" type="file" accept="image/*" multiple>
+        <div id="existingPhotos" class="row-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="visit-section-title">Visit Notes</div>
+      <textarea id="vNotes" class="form-group textarea"></textarea>
+    </div>
+    <div class="modal-foot"><button class="secondary" onclick="closeVisit()">Cancel</button><button id="deleteVisitButton" class="secondary" onclick="deleteVisitRecord()" style="display:none">Delete</button><button class="primary" onclick="saveVisit()">Save Visit</button></div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="claimModal">
+  <div class="modal">
+    <div class="modal-head"><div><h2 id="claimModalTitle">Add Claim</h2><p>Claims can be split, backdated, future-dated or entered on a non-visit day.</p></div><button class="modal-close" onclick="closeClaimModal()">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Claim Date</label><input id="claimDateInput" type="date"></div>
+        <div class="form-group"><label>Claim Amount</label><input id="claimAmountInput" type="number" min="0" step="0.01"></div>
+        <div class="form-group full"><label>Related Visit (Optional)</label><select id="claimVisitInput"></select></div>
+        <div class="form-group full"><label>Claim Notes</label><textarea id="claimNotesInput" placeholder="e.g. Split claim from previous visit, outstanding balance, insurer submission..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="secondary" onclick="closeClaimModal()">Cancel</button><button id="deleteClaimButton" class="secondary" onclick="deleteClaimRecord()" style="display:none">Delete</button><button class="primary" onclick="saveClaim()">Save Claim</button></div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const id = mapLegacyId(params.get("patient"));
+let p = getPatient(id);
+
+if(!p){
+  document.body.innerHTML = `<div style="padding:50px;text-align:center">Patient not found.<br><a class="primary" href="patients.html">Back to Patients</a></div>`;
+  throw new Error("Patient not found");
+}
+
+let editingVisitId = null;
+let editingClaimId = null;
+let editingCharges = [];
+
+// Explicit element references. Do not rely on browser-created globals from element IDs.
+const chargeBuilderEl = document.getElementById("chargeBuilder");
+const vTotalEl = document.getElementById("vTotal");
+const vPanelEl = document.getElementById("vPanel");
+const vSelfEl = document.getElementById("vSelf");
+
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+function money2(value){ return money(Number(value)||0); }
+
+/*
+  Assigning a <select>.value that matches no <option> silently
+  resets it to "". That used to wipe a patient's panel or
+  doctor the moment Edit Patient was opened and saved, if that
+  panel/doctor had since been disabled or renamed in Settings.
+  Each renderer now keeps the current value as an option.
+*/
+function preserveCurrentOption(select, selected, label){
+  const value = String(selected || "");
+  if(!value) return;
+
+  const present = Array.from(select.options)
+    .some(option => option.value === value);
+
+  if(!present){
+    select.insertAdjacentHTML(
+      "beforeend",
+      `<option value="${escapeHtml(value)}">${escapeHtml(value)} ${escapeHtml(label)}</option>`
+    );
+  }
+}
+
+function renderDoctorOptions(select, selected=""){
+  if(!select) return;
+  select.innerHTML =
+    `<option value="">Select doctor</option>` +
+    getwellDoctorOptions().map(d =>
+      `<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`
+    ).join("");
+  preserveCurrentOption(select, selected, "(not in Settings)");
+  select.value = selected || "";
+}
+
+function renderPanelOptions(select, selected=""){
+  if(!select) return;
+  select.innerHTML = getwellPanelOptions()
+    .map(panel => `<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.name)}</option>`)
+    .join("");
+  preserveCurrentOption(select, selected, "(not in Settings)");
+  select.value = selected || "SELF_PAY";
+}
+
+/*
+  VISIT TYPE
+
+  Was a free-text <input>. It is now a <select> fed from
+  Settings -> Doctors & Charges -> Visit Types, using the same
+  preserveCurrentOption() guard as the doctor, panel and status
+  dropdowns above.
+
+  That guard is what protects history: a visit saved as
+  "Consultation" still shows "Consultation" after the type has
+  been disabled or deleted in Settings, because the value is
+  re-added as an option marked "(not in Settings)" instead of
+  being silently reset to "". Only the list offered for NEW
+  visits changes.
+*/
+function renderVisitTypeOptions(select, selected=""){
+  if(!select) return;
+
+  select.innerHTML =
+    `<option value="">Select visit type</option>` +
+    getwellVisitTypeOptions().map(type =>
+      `<option value="${escapeHtml(type.name)}">${escapeHtml(type.name)}</option>`
+    ).join("");
+
+  preserveCurrentOption(select, selected, "(not in Settings)");
+  select.value = selected || "";
+}
+
+/* Patient statuses now come from Settings instead of being hardcoded. */
+function renderStatusOptions(select, selected=""){
+  if(!select) return;
+  select.innerHTML = getwellActivePatientStatuses()
+    .map(status => `<option value="${escapeHtml(status.name)}">${escapeHtml(status.name)}</option>`)
+    .join("");
+  preserveCurrentOption(select, selected, "(not in Settings)");
+  select.value = selected || getwellDefaultPatientStatus();
+}
+
+function openEditPatient(){
+  renderPanelOptions(editPanel, p.panelProvider || "SELF_PAY");
+  renderDoctorOptions(editDoctor, p.doctor || "");
+  renderStatusOptions(editStatus, p.status || "");
+
+  editName.value=p.name||"";
+  editPatientId.value=p.id;
+  editPhone.value=p.phone||"";
+  editDob.value=getwellDateKey(p.dob);
+  editGender.value=p.gender||"";
+  editHeight.value=p.height||"";
+  editStartingWeight.value=p.startingWeight||"";
+  editGoalWeight.value=p.goalWeight||"";
+  editStartDate.value=getwellDateKey(p.startDate);
+  editPanelStatus.value=p.panelStatus||"Active";
+  editPanelSuspensionNote.value=p.panelSuspensionNote||"";
+  editPatientModal.classList.add("show");
+}
+
+function closeEditPatient(){ editPatientModal.classList.remove("show"); }
+
+
+/* =========================================================
+   PATIENT PROFILE PHOTO
+   ---------------------------------------------------------
+   Two entry points, one implementation: the pencil button on
+   the profile hero, and the Profile Photo block at the top of
+   the Edit Patient modal. Both render through
+   renderPatientPhotoControls().
+========================================================= */
+
+function renderPatientPhotoControls(message, tone){
+  const hasPhoto = getwellPatientHasPhoto(p);
+
+  document.querySelectorAll("[data-patient-photo-preview]").forEach(node => {
+    node.innerHTML = getwellPatientAvatar(p);
+  });
+
+  document.querySelectorAll("[data-patient-photo-remove]").forEach(node => {
+    node.disabled = !hasPhoto;
+    node.style.opacity = hasPhoto ? "1" : ".5";
+  });
+
+  document.querySelectorAll("[data-patient-photo-status]").forEach(node => {
+    if(message){
+      node.textContent = message;
+      node.style.color = tone === "error"
+        ? "var(--red)"
+        : tone === "warn"
+          ? "var(--orange)"
+          : "var(--green)";
+      return;
+    }
+
+    if(p.photoUrl){
+      node.textContent = "Stored in Google Drive";
+      node.style.color = "var(--green)";
+    }else if(p.photoLocal){
+      node.textContent = "This device only";
+      node.style.color = "var(--orange)";
+    }else{
+      node.textContent = "Using patient initials";
+      node.style.color = "var(--muted)";
+    }
+  });
+
+  const sub = document.getElementById("patientPhotoSub");
+  if(sub) sub.textContent = `${p.name || ""} · ${p.id || ""}`;
+}
+
+
+function openPatientPhoto(){
+  renderPatientPhotoControls();
+  document.getElementById("patientPhotoModal").classList.add("show");
+}
+
+
+function closePatientPhoto(){
+  document.getElementById("patientPhotoModal").classList.remove("show");
+}
+
+
+async function handlePatientPhoto(input){
+  const file = input && input.files && input.files[0];
+  if(!file) return;
+
+  input.value = "";
+  renderPatientPhotoControls("Uploading…", "warn");
+
+  const result = await getwellUploadPatientPhoto(p, file);
+
+  if(!result.ok){
+    renderPatientPhotoControls(result.error || "Upload failed.", "error");
+    getwellNotify(result.error || "The photo could not be saved.", "error");
+    return;
+  }
+
+  Object.assign(p, result.photo);
+  const saveResult = await upsertPatient(p);
+
+  getwellLogActivity(
+    "Edit",
+    "Patient",
+    `${p.id} · ${p.name}`,
+    result.local
+      ? "Profile photo saved on this device only (Google Drive unavailable)"
+      : "Profile photo updated"
+  );
+
+  p = getPatient(p.id) || p;
+  refresh();
+  renderPatientPhotoControls();
+
+  if(result.local){
+    getwellNotify(
+      "Google Drive is unavailable, so the photo is stored on this device only. " +
+      (result.error || ""),
+      "error"
+    );
+  }else{
+    getwellAnnounceSave(saveResult, "Profile photo updated.");
+  }
+}
+
+
+async function removePatientPhoto(){
+  if(!getwellPatientHasPhoto(p)) return;
+  if(!await getwellConfirmDelete("Profile Photo")) return;
+
+  Object.assign(p, getwellClearedPatientPhoto());
+  const saveResult = await upsertPatient(p);
+
+  getwellLogActivity(
+    "Edit",
+    "Patient",
+    `${p.id} · ${p.name}`,
+    "Profile photo removed"
+  );
+
+  p = getPatient(p.id) || p;
+  refresh();
+  renderPatientPhotoControls();
+
+  getwellAnnounceSave(saveResult, "Profile photo removed. The patient's initials are shown again.");
+}
+
+async function savePatientChanges(){
+  p.name=editName.value.trim();
+  p.phone=editPhone.value;
+  p.dob=getwellDateKey(editDob.value);
+  p.gender=editGender.value;
+  p.height=editHeight.value;
+  p.startingWeight=+editStartingWeight.value||0;
+  p.goalWeight=+editGoalWeight.value||0;
+  p.startDate=getwellDateKey(editStartDate.value);
+  p.panelProvider=normalizePanelType(editPanel.value);
+  p.panelStatus=patientUsesPanel(p)?editPanelStatus.value:"Active";
+  p.panelSuspensionNote=patientUsesPanel(p)?editPanelSuspensionNote.value.trim():"";
+  p.doctor=editDoctor.value||"";
+  p.status=editStatus.value;
+  /* Awaited so the profile only re-renders once the record is
+     genuinely persisted, matching Add Patient. */
+  const saveResult=await upsertPatient(p);
+  getwellLogActivity(
+    "Edit",
+    "Patient",
+    `${p.id} · ${p.name}`,
+    `Status: ${p.status} · Panel: ${getPanelName(p)}`
+  );
+  if(!getwellAnnounceSave(saveResult,"Patient saved to Google Sheets.")){
+    p=getPatient(p.id);
+    refresh();
+    return;
+  }
+  p=getPatient(p.id);
+  closeEditPatient();
+  refresh();
+}
+
+async function deletePatientRecord(){
+  if(!p) return;
+  if(!await getwellConfirmDelete("Patient")) return;
+  const id=p.id;
+  const removedName=p.name||"";
+  const data=store();
+  data.patients=(data.patients||[]).filter(x=>x&&x.id!==id);
+  const saveResult=await saveStore(data);
+  getwellLogActivity(
+    "Delete",
+    "Patient",
+    `${id} · ${removedName}`,
+    "Patient record and all its visits, claims and appointments removed"
+  );
+  if(!getwellAnnounceSave(saveResult,"Patient deleted from Google Sheets.")) return;
+  location.href="patients.html";
+}
+
+async function deleteVisitRecord(){
+  if(!editingVisitId) return;
+  if(!await getwellConfirmDelete("Visit")) return;
+  const removedVisit=(p.visits||[]).find(v=>v&&v.id===editingVisitId);
+  p.visits=(p.visits||[]).filter(v=>v&&v.id!==editingVisitId);
+
+  /* Removing a visit from the middle renumbers the rest, so
+     1,2,3,4 minus the second becomes 1,2,3. */
+  getwellRenumberVisits(p);
+
+  const newestWeighed=getwellPatientWeightSeries(p).slice(-1)[0];
+  if(newestWeighed)p.currentWeight=newestWeighed.value;
+
+  const saveResult=await upsertPatient(p);
+  getwellLogActivity(
+    "Delete",
+    "Visit",
+    `${editingVisitId} · ${p.name||p.id}`,
+    removedVisit?`Visit date ${removedVisit.dateKey||removedVisit.date||""}`:""
+  );
+  if(!getwellAnnounceSave(saveResult,"Visit deleted from Google Sheets.")){
+    p=getPatient(p.id);
+    refresh();
+    return;
+  }
+  closeVisit();
+  p=getPatient(p.id);
+  refresh();
+}
+
+async function deleteClaimRecord(){
+  if(!editingClaimId) return;
+  if(!await getwellConfirmDelete("Claim")) return;
+  const removedClaim=(p.claims||[]).find(c=>c&&c.id===editingClaimId);
+  p.claims=(p.claims||[]).filter(c=>c&&c.id!==editingClaimId);
+  const saveResult=await upsertPatient(p);
+  getwellLogActivity(
+    "Delete",
+    "Claim",
+    `${editingClaimId} · ${p.name||p.id}`,
+    removedClaim?`${money(removedClaim.amount||0)} · ${removedClaim.claimDate||""}`:""
+  );
+  if(!getwellAnnounceSave(saveResult,"Claim deleted from Google Sheets.")){
+    p=getPatient(p.id);
+    refresh();
+    return;
+  }
+  closeClaimModal();
+  p=getPatient(p.id);
+  refresh();
+}
+
+function showSection(s,b){
+  document.querySelectorAll("[id^='sec-']").forEach(x=>x.style.display="none");
+  document.getElementById("sec-"+s).style.display="block";
+  document.querySelectorAll(".patient-tabs button").forEach(x=>x.classList.remove("active"));
+  if(b)b.classList.add("active");
+}
+
+function openAddVisit(){
+  editingVisitId=null;
+  editingCharges=[];
+  resetVisit();
+  visitModalTitle.textContent="Add Visit";
+  visitModalSub.textContent=p.name;
+  document.getElementById("deleteVisitButton").style.display="none";
+  visitModal.classList.add("show");
+}
+
+function closeVisit(){
+  visitModal.classList.remove("show");
+  editingVisitId=null;
+}
+
+function resetVisit(){
+  /* Local calendar day. toISOString() gave yesterday in GMT+8
+     between midnight and 8am. */
+  vDate.value=getwellTodayKey();
+  /* A placeholder only. The real number is derived from the
+     visit date on save, so entering an older visit does not
+     produce a "Visit 6" dated before Visit 2. */
+  vNumber.value=`Visit ${(p.visits||[]).length+1}`;
+  renderVisitTypeOptions(vType, getwellDefaultVisitType());
+  vWeight.value="";
+  vInvoiceRef.value="";
+  vPanelEl.value=0;
+  vSelfEl.value=0;
+  vNotes.value="";
+  vPdf.value="";
+  vPhotos.value="";
+  existingPdf.textContent="";
+  existingPhotos.textContent="";
+  pdfReadStatus.className="badge gray";
+  pdfReadStatus.textContent="No PDF selected.";
+  arboleafLastText="";
+  loadArboleafDraft(null);
+  renderChargeBuilder();
+  updateVisitTotal();
+}
+
+function getChargesForVisit(v){
+  ensureVisit(v);
+  return (v.charges||[]).map(item => ({...item}));
+}
+
+function newCharge(category){
+  return {
+    id:`CH-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+    category,
+    itemId:"",
+    itemName:"",
+    price:0,
+    notes:""
+  };
+}
+
+/*
+  HISTORICAL CHARGE ITEMS
+
+  A charge row stores {itemId, itemName, price}. The NAME is
+  stored on the row itself, so removing an item from Settings
+  can never erase what a past visit was billed for -- the
+  Charges sheet keeps its own copy.
+
+  What used to go wrong was only in this form: a <select>
+  whose value matches no <option> silently falls back to "",
+  so reopening an old visit whose item had since been removed
+  showed "Select item" and re-saving wiped the name. Two cases
+  needed covering:
+
+    1. The item still exists but is DISABLED  -> its real name.
+    2. The item is gone, or the row is legacy data with no
+       itemId at all (only a name)            -> a synthetic
+       "legacy:<name>" option so the name survives a re-save.
+
+  Both are appended to that one row's dropdown only, and never
+  appear as choices on a new row.
+*/
+const LEGACY_ITEM_PREFIX="legacy:";
+
+function chargeRowOptionValue(row){
+  if(row.itemId) return String(row.itemId);
+  return row.itemName ? LEGACY_ITEM_PREFIX+row.itemName : "";
+}
+
+function historicalChargeOption(row, enabledItems){
+  const value=chargeRowOptionValue(row);
+  if(!value) return "";
+
+  /* Already offered as a normal enabled option: nothing to add. */
+  if(enabledItems.some(item=>String(item.id)===value)) return "";
+
+  /* Case 1: still configured, just disabled. */
+  const disabledItem=getwellChargeItemAny(row.category,row.itemId);
+  const label=disabledItem
+    ? `${disabledItem.name} (disabled in Settings)`
+    : `${row.itemName||"Historical item"} (not in Settings)`;
+
+  return `<option value="${escapeHtml(value)}" selected>${escapeHtml(label)}</option>`;
+}
+
+function renderChargeBuilder(){
+  const categories=["Injection","Medication","Treatment","Additional"];
+  chargeBuilderEl.innerHTML=categories.map(category=>{
+    const rows=editingCharges.filter(c=>c.category===category);
+    const items=getwellChargeCatalog()[category]||[];
+    return `
+      <div class="card" style="margin-bottom:10px;border:1px solid var(--border);box-shadow:none">
+        <div class="card-head" style="padding:12px 14px">
+          <div><strong>${category}</strong><div class="row-sub">Select an item from Settings. Price is filled automatically but can be adjusted.</div></div>
+          <button class="secondary" type="button" onclick="addCharge('${category}')">＋ Add ${category}</button>
+        </div>
+        <div class="card-body" style="padding:12px 14px">
+          ${rows.length ? rows.map(row=>{
+            const index=editingCharges.indexOf(row);
+            return `
+              <div class="charge-line" style="display:grid;grid-template-columns:minmax(180px,1.4fr) 150px minmax(180px,1fr) auto;gap:8px;align-items:start;margin-bottom:8px">
+                <select class="claim-input" onchange="changeChargeItem(${index},this.value)">
+                  <option value="">Select item</option>
+                  ${items.map(item=>`<option value="${escapeHtml(item.id)}" ${String(row.itemId)===String(item.id)?"selected":""}>${escapeHtml(item.name)} — ${money2(item.price)}</option>`).join("")}
+                  ${historicalChargeOption(row,items)}
+                </select>
+                <input class="claim-input" type="number" min="0" step="0.01" value="${Number(row.price)||0}" oninput="changeChargePrice(${index},this.value)" placeholder="Price">
+                <input class="claim-input" value="${escapeHtml(row.notes||"")}" oninput="changeChargeNotes(${index},this.value)" placeholder="Notes">
+                <button class="secondary" type="button" onclick="removeCharge(${index})">×</button>
+              </div>
+            `;
+          }).join("") : `<div class="notif-empty">No ${category.toLowerCase()} added.</div>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function addCharge(category){
+  editingCharges.push(newCharge(category));
+  renderChargeBuilder();
+  updateVisitTotal();
+}
+
+function changeChargeItem(index,value){
+  const row=editingCharges[index];
+  if(!row)return;
+
+  /*
+    Re-selecting the historical placeholder must not turn
+    "legacy:Tirzepatide 2.5mg" into an itemId. It keeps the
+    stored name and leaves itemId empty, exactly as the record
+    was written originally.
+  */
+  if(String(value).startsWith(LEGACY_ITEM_PREFIX)){
+    row.itemId="";
+    row.itemName=String(value).slice(LEGACY_ITEM_PREFIX.length);
+    renderChargeBuilder();
+    updateVisitTotal();
+    return;
+  }
+
+  /* Look the item up including disabled ones, so choosing a
+     disabled historical entry keeps its correct name. */
+  const item=getwellChargeItemAny(row.category,value);
+  row.itemId=value;
+  row.itemName=item?.name||row.itemName||"";
+  if(item) row.price=Number(item.price)||0;
+  renderChargeBuilder();
+  updateVisitTotal();
+}
+
+function changeChargePrice(index,value){
+  if(editingCharges[index]) editingCharges[index].price=Math.max(0,Number(value)||0);
+  updateVisitTotal();
+}
+
+function changeChargeNotes(index,value){
+  if(editingCharges[index]) editingCharges[index].notes=value;
+}
+
+function removeCharge(index){
+  editingCharges.splice(index,1);
+  renderChargeBuilder();
+  updateVisitTotal();
+}
+
+function updateVisitTotal(){
+  // Calculate directly from the current charge rows every time.
+  // This remains reliable even after several visits have been created/edited.
+  const total=editingCharges.reduce((sum,c)=>{
+    const value=Number.parseFloat(c?.price);
+    return sum + (Number.isFinite(value) && value > 0 ? value : 0);
+  },0);
+
+  vTotalEl.textContent=money(total);
+
+  if(!patientUsesPanel(p)){
+    vPanelEl.value=0;
+    vSelfEl.value=total.toFixed(2);
+    vValidation.className="badge green";
+    vValidation.textContent="Self-Pay patient: full visit total is assigned to Self-Pay.";
+    return true;
+  }
+
+  const ok=Math.abs(total-((+vPanelEl.value||0)+(+vSelfEl.value||0)))<0.001;
+  vValidation.className="badge "+(ok?"green":"red");
+  vValidation.textContent=ok?"Panel + Self-Pay matches Visit Total.":"Panel + Self-Pay must equal Visit Total.";
+  return ok;
+}
+
+vPanelEl.addEventListener("input",updateVisitTotal);
+vSelfEl.addEventListener("input",updateVisitTotal);
+
+function openEditVisit(vid){
+  const v=(p.visits||[]).find(x=>x.id===vid);
+  if(!v)return;
+
+  editingVisitId=vid;
+  editingCharges=getChargesForVisit(v);
+
+  /*
+    getwellDateKey() repairs a record that was already stored
+    as "2025-11-12T16:00:00.000Z" back to "2025-11-13", so the
+    date input populates with the day the user originally
+    picked and saving again does not shift it further.
+  */
+  vDate.value=getwellDateKey(v.dateKey);
+  vNumber.value=v.visit||"";
+  renderVisitTypeOptions(vType, v.type||"");
+  vWeight.value=v.weight==="—"?"":v.weight;
+  vInvoiceRef.value=v.invoiceReference||"";
+  vPanelEl.value=ensureVisit(v).billing.panel||0;
+  vSelfEl.value=ensureVisit(v).billing.selfPay||0;
+  vNotes.value=v.notes||"";
+  vPdf.value="";
+  vPhotos.value="";
+  existingPdf.textContent=v.pdfName?`Existing PDF: ${v.pdfName}`:"No PDF attached.";
+  existingPhotos.textContent=(v.photos||[]).length?`${v.photos.length} existing photo(s). New uploads will be added.`:"No photos attached.";
+  pdfReadStatus.className="badge "+(v.arboleafText?"green":"gray");
+  pdfReadStatus.textContent=v.arboleafText?"Arboleaf PDF already parsed.":"No new PDF selected.";
+
+  arboleafLastText=v.arboleafText||"";
+  loadArboleafDraft(v);
+
+  visitModalTitle.textContent="Edit Visit";
+  /* The DERIVED label, so the modal agrees with the profile
+     even when the stored number is stale. */
+  visitModalSub.textContent=`${p.name} · ${getwellVisitLabel(p,v)}`;
+  document.getElementById("deleteVisitButton").style.display="inline-flex";
+  renderChargeBuilder();
+  visitModal.classList.add("show");
+  updateVisitTotal();
+}
+
+/* =========================================================
+   READING AN ARBOLEAF REPORT
+   ---------------------------------------------------------
+   Two routes into the same parser:
+
+   1. TEXT LAYER — instant, used whenever the PDF actually
+      contains text. Lines are rebuilt from the y position of
+      each text item, because the parser reads the report row
+      by row.
+
+   2. OCR — the Arboleaf app exports its report as page
+      IMAGES (Skia/PDF, no embedded fonts, no text objects),
+      so route 1 returns nothing for the files this clinic
+      actually has. That is exactly why uploading a report
+      used to record no measurements at all. Those pages are
+      rendered to a canvas and read with Tesseract, which is
+      downloaded lazily the first time it is needed.
+
+   Whatever comes back is a STARTING POINT, never the saved
+   value. Every reading lands in the review grid underneath
+   the upload, where staff confirm or correct it against the
+   PDF before the visit is saved. OCR of a screenshot is good,
+   not perfect, and a body-composition figure is not something
+   to accept on trust.
+========================================================= */
+
+function normalizeMetricNumber(value){
+  const n=Number(String(value).replace(/,/g,""));
+  return Number.isFinite(n)?n:null;
+}
+
+
+/*
+  Text-layer extraction. Items are grouped into lines by their
+  y coordinate so the parser sees "Protein (kg) 10.5 7.09~8.67"
+  as one row rather than as loose words.
+*/
+async function extractPdfText(file){
+  if(!window.pdfjsLib) throw new Error("PDF reader is not available.");
+
+  const buffer=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buffer}).promise;
+  const lines=[];
+
+  for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+    const page=await pdf.getPage(pageNo);
+    const content=await page.getTextContent();
+    const rows=new Map();
+
+    content.items.forEach(item=>{
+      const text=String(item.str||"");
+      if(!text.trim()) return;
+      /* transform[5] is the item's y position; rounding to 2pt
+         buckets keeps a row together without merging rows. */
+      const y=Math.round((item.transform&&item.transform[5]||0)/2);
+      if(!rows.has(y)) rows.set(y,[]);
+      rows.get(y).push({x:item.transform&&item.transform[4]||0,text});
+    });
+
+    [...rows.keys()].sort((a,b)=>b-a).forEach(y=>{
+      const row=rows.get(y).sort((a,b)=>a.x-b.x).map(cell=>cell.text).join(" ");
+      if(row.trim()) lines.push(row.trim());
+    });
+  }
+
+  return lines.join("\n").trim();
+}
+
+
+/* Tesseract is ~2MB of engine plus a language file, so it is
+   fetched only when a scanned report actually needs it. */
+let getwellOcrLoader=null;
+
+function getwellLoadOcrEngine(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(getwellOcrLoader) return getwellOcrLoader;
+
+  getwellOcrLoader=new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js";
+    script.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error("OCR engine failed to start."));
+    script.onerror=()=>reject(new Error("The OCR engine could not be downloaded."));
+    document.head.appendChild(script);
+  });
+
+  return getwellOcrLoader;
+}
+
+
+/*
+  Render each page to a canvas and read it.
+
+  The width is capped at 2200px: that is the resolution the
+  Arboleaf layout reads best at in testing, and going higher
+  costs time without recovering more figures.
+*/
+async function extractPdfTextByOcr(file,onProgress){
+  const Tesseract=await getwellLoadOcrEngine();
+  const buffer=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buffer}).promise;
+
+  const worker=await Tesseract.createWorker("eng");
+  await worker.setParameters({tessedit_pageseg_mode:"4"});
+
+  let text="";
+
+  try{
+    for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+      if(onProgress) onProgress(`Reading page ${pageNo} of ${pdf.numPages}…`);
+
+      const page=await pdf.getPage(pageNo);
+      const base=page.getViewport({scale:1});
+      const scale=Math.max(1,Math.min(4,2600/base.width));
+      const viewport=page.getViewport({scale});
+
+      const canvas=document.createElement("canvas");
+      canvas.width=Math.round(viewport.width);
+      canvas.height=Math.round(viewport.height);
+
+      const context=canvas.getContext("2d");
+
+      /*
+        pdf.js draws onto a TRANSPARENT canvas. Handing that
+        straight to the OCR engine wrecks recognition, because
+        the unpainted background is read as black rather than
+        as paper. Filling the page white first is what turns a
+        garbled read into a usable one.
+      */
+      context.fillStyle="#FFFFFF";
+      context.fillRect(0,0,canvas.width,canvas.height);
+
+      await page.render({canvasContext:context,viewport}).promise;
+
+      const result=await worker.recognize(canvas);
+      text+=(result&&result.data&&result.data.text||"")+"\n";
+
+      canvas.width=0;
+      canvas.height=0;
+    }
+  }finally{
+    await worker.terminate();
+  }
+
+  return text.trim();
+}
+
+
+/*
+  Kept under its original name and signature. The matching
+  itself now lives in app.js (getwellParseArboleafReport) so
+  the registry, the parser and the graphs cannot drift apart.
+*/
+function parseArboleafMetrics(text){
+  return getwellParseArboleafReport(text).metrics;
+}
+
+
+/* =========================================================
+   ARBOLEAF REVIEW GRID
+   ---------------------------------------------------------
+   The twelve core categories from the report, plus the
+   supplementary values behind a toggle. Whatever the reader
+   recovered is filled in here; the boxes are what actually get
+   saved, so a misread figure is corrected once, before it ever
+   reaches Google Sheets or a graph.
+
+   State lives in `arboleafDraft` for the life of the open
+   modal only. Nothing here writes to the patient record.
+========================================================= */
+
+let arboleafDraft = {};       /* metric name -> {value, unit} */
+let arboleafFlagged = [];     /* metric names needing a check */
+let arboleafExtrasOpen = false;
+
+
+function arboleafFieldHtml(definition){
+  const held = arboleafDraft[definition.name];
+  const flagged = arboleafFlagged.includes(definition.name);
+
+  /* Body Type is a word, so it gets a text box. */
+  if(definition.text){
+    const text = typeof held === "string" ? held : (held && held.value) || "";
+    return `
+    <div class="arb-field">
+      <label for="arb-${escapeHtml(definition.name)}">${escapeHtml(definition.name)}</label>
+      <input id="arb-${escapeHtml(definition.name)}" type="text"
+             value="${escapeHtml(String(text))}"
+             data-arb-metric="${escapeHtml(definition.name)}"
+             data-arb-text="1"
+             oninput="markArboleafChecked(this)">
+    </div>`;
+  }
+
+  const value = held && Number.isFinite(Number(held.value)) ? held.value : "";
+
+  return `
+    <div class="arb-field${flagged ? " flagged" : ""}">
+      <label for="arb-${escapeHtml(definition.name)}">
+        ${escapeHtml(definition.name)}${definition.unit ? ` <span>(${escapeHtml(definition.unit)})</span>` : ""}
+      </label>
+      <input id="arb-${escapeHtml(definition.name)}"
+             type="number" step="any" inputmode="decimal"
+             value="${escapeHtml(String(value))}"
+             data-arb-metric="${escapeHtml(definition.name)}"
+             oninput="markArboleafChecked(this)">
+      ${flagged ? `<span class="arb-flag" title="Read from a scanned report and not confirmed by the printed normal range — please check it against the PDF.">check</span>` : ""}
+    </div>`;
+}
+
+
+function renderArboleafGrid(){
+  const grid = document.getElementById("arboleafGrid");
+  const extra = document.getElementById("arboleafGridExtra");
+  if(!grid || !extra) return;
+
+  grid.innerHTML  = GETWELL_ARBOLEAF_CORE.map(arboleafFieldHtml).join("");
+  extra.innerHTML = GETWELL_ARBOLEAF_METRICS
+    .filter(metric => !metric.core && !metric.legacy)
+    .map(arboleafFieldHtml).join("");   /* includes Body Type */
+
+  extra.hidden = !arboleafExtrasOpen;
+
+  const toggle = document.getElementById("arboleafExtraToggle");
+  if(toggle) toggle.textContent = arboleafExtrasOpen
+    ? "Hide additional values"
+    : "Show additional values";
+}
+
+
+function toggleArboleafExtras(){
+  arboleafExtrasOpen = !arboleafExtrasOpen;
+  renderArboleafGrid();
+}
+
+
+/* Editing a flagged value is the confirmation. */
+function markArboleafChecked(input){
+  const name = input.getAttribute("data-arb-metric");
+  const index = arboleafFlagged.indexOf(name);
+  if(index >= 0){
+    arboleafFlagged.splice(index, 1);
+    input.closest(".arb-field")?.classList.remove("flagged");
+    input.closest(".arb-field")?.querySelector(".arb-flag")?.remove();
+  }
+}
+
+
+/* Seed the grid from a visit already on file. */
+function loadArboleafDraft(visit){
+  arboleafDraft = {};
+  arboleafFlagged = [];
+  arboleafExtrasOpen = false;
+
+  GETWELL_ARBOLEAF_METRICS.forEach(definition => {
+    if(definition.text){
+      const text = getwellArboleafText(visit, definition.name);
+      if(text) arboleafDraft[definition.name] = text;
+      return;
+    }
+    const reading = getwellArboleafValue(visit, definition.name);
+    if(reading) arboleafDraft[definition.name] = {value:reading.value, unit:reading.unit || definition.unit};
+  });
+
+  renderArboleafGrid();
+  setArboleafNote(
+    Object.keys(arboleafDraft).length
+      ? `${Object.keys(arboleafDraft).length} measurement(s) already recorded for this visit.`
+      : "Upload a report to read it, or type the values in."
+  );
+}
+
+
+function setArboleafNote(text){
+  const note = document.getElementById("arboleafReviewNote");
+  if(note) note.textContent = text;
+}
+
+
+/*
+  Read the boxes back out. Only fields holding a real number
+  are stored, so clearing a box removes that measurement rather
+  than saving a zero.
+*/
+function collectArboleafMetrics(){
+  const metrics = {};
+
+  document.querySelectorAll("[data-arb-metric]").forEach(input => {
+    const name = input.getAttribute("data-arb-metric");
+    const raw = String(input.value || "").trim();
+    if(!raw) return;
+
+    /* Body Type is stored as the plain string the previous
+       build used, so nothing already in Google Sheets changes
+       shape. */
+    if(input.getAttribute("data-arb-text")){
+      metrics[name] = raw;
+      return;
+    }
+
+    const value = Number(raw);
+    if(!Number.isFinite(value)) return;
+
+    metrics[name] = {value, unit:getwellMetricDefinition(name).unit};
+  });
+
+  return metrics;
+}
+
+
+/*
+  Upload handler. Tries the text layer first, falls back to
+  OCR, and fills the grid with whatever was recovered without
+  ever discarding a value the user has already typed.
+*/
+async function handleArboleafFile(input){
+  const file = input && input.files && input.files[0];
+  if(!file) return;
+
+  const status = document.getElementById("pdfReadStatus");
+  const setStatus = (tone, text) => {
+    if(!status) return;
+    status.className = "badge " + tone;
+    status.textContent = text;
+  };
+
+  /* Keep anything already typed; the report only fills gaps
+     and refreshes what it can read. */
+  const typed = collectArboleafMetrics();
+
+  setStatus("blue", "Reading Arboleaf PDF…");
+
+  let text = "";
+  let usedOcr = false;
+
+  try{
+    text = await extractPdfText(file);
+  }catch(error){
+    console.error("Text-layer read failed:", error);
+  }
+
+  /* An Arboleaf export is a page image: no text comes back,
+     so the pages are read with OCR instead. */
+  if(String(text).replace(/\s/g, "").length < 40){
+    usedOcr = true;
+    setStatus("blue", "Scanned report — starting OCR (first run downloads the reader)…");
+
+    try{
+      text = await extractPdfTextByOcr(file, message => setStatus("blue", message));
+    }catch(error){
+      console.error("OCR failed:", error);
+      setStatus("red", "The report could not be read automatically. Enter the values below — the PDF is still saved with the visit.");
+      arboleafLastText = "";
+      return;
+    }
+  }
+
+  arboleafLastText = text;
+
+  const parsed = getwellParseArboleafReport(text);
+  const found = Object.keys(parsed.metrics);
+
+  arboleafDraft = Object.assign({}, typed, parsed.metrics);
+
+  /*
+    A value recovered from a SCANNED report is never treated as
+    confirmed, even when the parser matched it against the
+    report's own printed normal range. OCR of a screenshot gets
+    most figures right and some wrong, and there is no way to
+    tell which from inside the app — so every one of them is
+    marked for checking and the clinician's eye is the last
+    step. Only a genuine text-layer PDF keeps the parser's own
+    narrower confidence judgement.
+  */
+  arboleafFlagged = (usedOcr ? found : parsed.flagged).filter(name => !typed[name]);
+
+  renderArboleafGrid();
+
+  if(!found.length){
+    setStatus("red", "No measurements could be read from this report. Enter them below — the PDF is still saved with the visit.");
+    setArboleafNote("Nothing was recognised in the report. Please enter the measurements.");
+    return;
+  }
+
+  setStatus(
+    arboleafFlagged.length ? "orange" : "green",
+    `${found.length} measurement(s) read${usedOcr ? " by OCR" : ""}` +
+    (arboleafFlagged.length ? ` · check ${arboleafFlagged.length} against the PDF` : "")
+  );
+
+  setArboleafNote(
+    usedOcr
+      ? "This report is a scanned image, so the figures were read by OCR. Please check every value against the PDF before saving — correcting a box clears its warning."
+      : "Read from the report. Please confirm the values before saving."
+  );
+}
+
+
+let arboleafLastText = "";
+
+
+/*
+  The per-visit measurement cards. Unchanged in purpose — it
+  still lists what each Arboleaf-enabled visit recorded — but
+  it now walks the chronologically sorted visits, shows the
+  derived visit number, and reads through the metric registry
+  so the cards appear in report order with the report's units.
+*/
+function renderBodyComposition(){
+  const rows=getwellPatientVisitsSorted(p).filter(row=>row.hasArboleaf);
+
+  if(!rows.length){
+    composition.innerHTML=`<div class="notif-empty">No body composition measurements recorded yet.
+      Upload an Arboleaf report on a visit, or enter the measurements when adding one.</div>`;
+    return;
+  }
+
+  composition.innerHTML=rows.map(row=>{
+    const v=row.visit;
+
+    const cards=GETWELL_ARBOLEAF_METRICS.map(definition=>{
+      if(definition.text){
+        const text=getwellArboleafText(v,definition.name);
+        return text
+          ? `<div class="finance-card"><div class="label">${escapeHtml(definition.name)}</div>
+             <div class="value" style="font-size:18px">${escapeHtml(text)}</div></div>`
+          : "";
+      }
+      const reading=getwellArboleafValue(v,definition.name);
+      if(!reading) return "";
+      const unit=reading.unit||definition.unit;
+      return `<div class="finance-card"><div class="label">${escapeHtml(definition.name)}</div>
+        <div class="value" style="font-size:18px">${getwellFormatMetric(reading.value,definition.decimals)}${unit?" "+escapeHtml(unit):""}</div></div>`;
+    }).join("");
+
+    return `<div class="card" style="margin-bottom:12px"><div class="card-head"><div>
+      <h3>${escapeHtml(row.label)}</h3>
+      <p>${escapeHtml(getwellShortVisitDate(row.dateKey,true))} · ${escapeHtml(v.pdfName||"Entered manually")}</p>
+      </div></div><div class="finance-grid">${cards}</div></div>`;
+  }).join("");
+}
+
+
+/* =========================================================
+   WEIGHT PROGRESS  /  BODY COMPOSITION PROGRESS
+
+   This is THIS patient's progress and nothing else. Every
+   point is read out of this patient's own saved visits
+   (visit.dateKey, visit.visit, visit.weight,
+   visit.arboleafMetrics) through the shared readers in
+   app.js. No other patient is touched, no average is taken,
+   no weekly/monthly buckets are invented and no missing
+   reading is interpolated: a visit with no value for the
+   measurement being charted is simply not plotted.
+
+   Nothing here writes. Adding these sections did not change
+   how anything is saved — Add/Edit/Delete Visit still call
+   upsertPatient() exactly as before, and because refresh()
+   re-reads the patient with getPatient(id), the charts
+   redraw themselves from the Sheet-backed data after every
+   save, delete, background sync or page reload.
+========================================================= */
+
+/* Remembered so a background sync (or any refresh()) does not
+   knock the selector back to Weight mid-review. */
+let selectedBodyMetric = "";
+
+const EM_DASH = "—";
+
+/*
+  One cell of the visit history table. The unit is carried by
+  the column heading, so the cell stays a bare figure — and a
+  measurement that was never recorded shows an em dash, never
+  a zero.
+*/
+function progressMetricCell(visit, metricName){
+  const reading = getwellArboleafValue(visit, metricName);
+  if(!reading) return EM_DASH;
+
+  return getwellFormatMetric(reading.value, getwellMetricDefinition(metricName).decimals);
+}
+
+
+function renderWeightProgress(){
+  const host = document.getElementById("weightProgress");
+  if(!host) return;
+
+  const visits = getwellPatientVisitsSorted(p);
+
+  if(!visits.length){
+    host.innerHTML = `<div class="notif-empty">No visit data yet.</div>`;
+    return;
+  }
+
+  const series = getwellPatientWeightSeries(p);
+
+  if(!series.length){
+    host.innerHTML = `<div class="notif-empty">No weight measurements recorded yet.</div>`;
+    return;
+  }
+
+  const summary = getwellPatientWeightSummary(p, series);
+
+  const kg = value => (value === null || value === undefined)
+    ? EM_DASH
+    : `${getwellFormatMetric(value, 1)} kg`;
+
+  /* Down is good: a loss is shown in green, a gain in amber. */
+  const lostClass = summary.lost === null ? "" : (summary.lost > 0 ? " good" : (summary.lost < 0 ? " warn" : ""));
+  const lostText = summary.lost === null
+    ? EM_DASH
+    : `${summary.lost > 0 ? "↓ " : summary.lost < 0 ? "↑ " : ""}${getwellFormatMetric(Math.abs(summary.lost), 1)} kg`;
+
+  const chart = getwellRenderProgressChart({
+    points: series,
+    unit: "kg",
+    decimals: 1,
+    yLabel: "Weight (kg)",
+    xLabel: "Visit date",
+    reference: summary.goal ? {value: summary.goal, label: "Goal"} : null,
+    ariaLabel: `Weight recorded at each visit for ${p.name || p.id}`
+  });
+
+  /* Named rather than counted, so it is obvious exactly which
+     point came from the PDF instead of the Weight field. */
+  const fallbackVisits = series.filter(point => point.source === "arboleaf").map(point => point.visit);
+  const fallbackNote = fallbackVisits.length
+    ? `<p class="progress-note">${escapeHtml(fallbackVisits.join(", "))} had no Weight field filled in, so the weight parsed from that visit's Arboleaf PDF was used.</p>`
+    : "";
+
+  host.innerHTML = `
+    <div class="progress-summary">
+      <div class="progress-stat">
+        <div class="label">Starting Weight</div>
+        <div class="value">${kg(summary.start)}</div>
+        <div class="note">${summary.start === null ? "Not recorded" : (summary.startFromVisit ? "From earliest visit" : "From patient record")}</div>
+      </div>
+      <div class="progress-stat">
+        <div class="label">Latest Weight</div>
+        <div class="value">${kg(summary.latest)}</div>
+        <div class="note">${escapeHtml(series[series.length - 1].full)}</div>
+      </div>
+      <div class="progress-stat">
+        <div class="label">Goal Weight</div>
+        <div class="value">${summary.goal === null ? EM_DASH : kg(summary.goal)}</div>
+        <div class="note">${summary.goal === null ? "No goal set" : "Target line on chart"}</div>
+      </div>
+      <div class="progress-stat">
+        <div class="label">Total Weight Lost</div>
+        <div class="value${lostClass}">${lostText}</div>
+        <div class="note">${summary.lost === null ? "Needs a starting weight" : "Starting weight vs latest visit"}</div>
+      </div>
+      <div class="progress-stat">
+        <div class="label">Recorded Visits</div>
+        <div class="value">${series.length}</div>
+        <div class="note">${series.length === visits.length ? "All visits weighed" : `${visits.length} visit${visits.length === 1 ? "" : "s"} in total`}</div>
+      </div>
+    </div>
+    ${chart}
+    ${fallbackNote}
+  `;
+}
+
+
+function renderBodyCompositionProgress(metricName){
+  const host = document.getElementById("bodyCompositionProgress");
+  if(!host) return;
+
+  const available = getwellPatientAvailableMetrics(p);
+
+  if(!available.length){
+    selectedBodyMetric = "";
+    host.innerHTML = `<div class="notif-empty">No body composition measurements recorded yet.
+      Upload an Arboleaf report on a visit, or enter the measurements when adding one.</div>`;
+    return;
+  }
+
+  /* Keep the current choice if it is still available, otherwise
+     fall back to Weight, otherwise to whatever exists. */
+  let selected = metricName || selectedBodyMetric;
+  if(!available.some(metric => metric.name === selected)){
+    selected = available.some(metric => metric.name === "Weight") ? "Weight" : available[0].name;
+  }
+  selectedBodyMetric = selected;
+
+  const definition = getwellMetricDefinition(selected);
+  const series = getwellPatientMetricSeries(p, selected);
+  const unit = (series.length && series[0].unit) || definition.unit;
+
+  /* The twelve categories the Arboleaf report prints with a
+     normal range come first, under their own group; everything
+     else the report carries follows under "Additional data". */
+  const option = metric =>
+    `<option value="${escapeHtml(metric.name)}"${metric.name === selected ? " selected" : ""}>${escapeHtml(metric.name)}</option>`;
+
+  const core  = available.filter(metric => metric.core);
+  const extra = available.filter(metric => !metric.core);
+
+  const options =
+    (core.length  ? `<optgroup label="Body composition (12)">${core.map(option).join("")}</optgroup>` : "") +
+    (extra.length ? `<optgroup label="Additional data">${extra.map(option).join("")}</optgroup>` : "");
+
+  const yLabel = unit ? `${selected} (${unit})` : selected;
+
+  /*
+    Part 23: a single reading is a measurement, not a trend. It
+    is shown as a figure rather than drawn as a one-point line
+    that implies a direction the data does not support.
+  */
+  const body = series.length >= 2
+    ? getwellRenderProgressChart({
+        points: series,
+        unit,
+        decimals: definition.decimals,
+        yLabel,
+        xLabel: "Visit date",
+        ariaLabel: `${selected} recorded at each Arboleaf visit for ${p.name || p.id}`
+      })
+    : series.length === 1
+      ? `<div class="single-reading">
+           <div class="single-reading-value">${getwellFormatMetric(series[0].value, definition.decimals)}${unit ? " " + escapeHtml(unit) : ""}</div>
+           <div class="single-reading-note">Only one ${escapeHtml(selected)} measurement is available, recorded at
+             ${escapeHtml(series[0].visit)} on ${escapeHtml(series[0].full)}. A second measurement is needed before a trend can be shown.</div>
+         </div>`
+      : `<div class="notif-empty">No ${escapeHtml(selected)} readings recorded yet.</div>`;
+
+  const skipped = getwellPatientVisitsSorted(p).length - series.length;
+
+  host.innerHTML = `
+    <div class="metric-picker">
+      <label for="bodyMetricSelect">Metric</label>
+      <select id="bodyMetricSelect" class="metric-select"
+              onchange="renderBodyCompositionProgress(this.value)">${options}</select>
+      <span class="metric-current">${escapeHtml(yLabel)}</span>
+    </div>
+    ${body}
+    ${series.length >= 2 && skipped > 0
+      ? `<p class="progress-note">${skipped} visit${skipped === 1 ? "" : "s"} without a ${escapeHtml(selected)} reading ${skipped === 1 ? "is" : "are"} not plotted.</p>`
+      : ""}
+  `;
+}
+
+
+/*
+  The visit-by-visit table, shown in the Visits tab. It exists
+  to make it obvious that the lines on the Body Composition
+  charts are drawn from real visits: every plotted point has a
+  row here. A metric that was never recorded shows an em dash,
+  never a zero.
+*/
+function renderVisitProgressTable(){
+  const host = document.getElementById("visitProgressRows");
+  if(!host) return;
+
+  const visits = getwellPatientVisitsSorted(p);
+
+  if(!visits.length){
+    host.innerHTML = `<tr><td colspan="8" class="notif-empty">No visit data yet.</td></tr>`;
+    return;
+  }
+
+  host.innerHTML = visits.map(row => {
+    const visit = row.visit;
+    const weight = getwellVisitWeight(visit);
+
+    return `
+      <tr>
+        <td><strong>${escapeHtml(row.label)}</strong></td>
+        <td>${escapeHtml(getwellShortVisitDate(row.dateKey, true))}</td>
+        <td>${weight ? getwellFormatMetric(weight.value, 1) : EM_DASH}</td>
+        <td>${progressMetricCell(visit, "BMI")}</td>
+        <td>${progressMetricCell(visit, "Body Fat Percentage")}</td>
+        <td>${progressMetricCell(visit, "Skeletal Muscle")}</td>
+        <td>${row.hasArboleaf
+              ? `<span class="badge green">Yes</span>`
+              : `<span class="badge gray">No</span>`}</td>
+        <td><button class="secondary" style="padding:6px 9px" onclick="openEditVisit('${escapeHtml(visit.id)}')">Edit</button></td>
+      </tr>`;
+  }).join("");
+}
+
+/* =========================================================
+   COMPARE 2 VISITS  +  PROGRESS REPORT
+   ---------------------------------------------------------
+   Two selectors listing this patient's actual visits, oldest
+   first. Any two may be chosen; they need not be consecutive,
+   and picking them in reverse order changes nothing because
+   the earlier/later roles come from the VISIT DATES
+   (getwellCompareVisits in app.js), never from the visit
+   number typed into a form.
+
+   Arboleaf is optional. With none on either visit the
+   comparison still shows dates, weights, height, the absolute
+   change and the percentage change, and the report still
+   generates — it simply omits the body-composition section
+   rather than printing an empty one.
+========================================================= */
+
+let compareA = "";
+let compareB = "";
+
+
+function renderVisitCompare(){
+  const host = document.getElementById("visitCompare");
+  if(!host) return;
+
+  const rows = getwellPatientVisitsSorted(p).filter(row => row.dateKey);
+
+  if(rows.length < 2){
+    host.innerHTML = `<div class="notif-empty">${
+      rows.length
+        ? "Two dated visits are needed before visits can be compared."
+        : "No visit data yet."
+    }</div>`;
+    return;
+  }
+
+  /* Default to the widest span: first visit against the
+     latest. Any selection the user has made is kept. */
+  if(!rows.some(row => row.id === compareA)) compareA = rows[0].id;
+  if(!rows.some(row => row.id === compareB)) compareB = rows[rows.length - 1].id;
+
+  const options = selected => rows.map(row =>
+    `<option value="${escapeHtml(row.id)}"${row.id === selected ? " selected" : ""}>${
+      escapeHtml(`${row.label} — ${getwellShortVisitDate(row.dateKey, true)}`)
+    }${row.hasArboleaf ? " · Arboleaf" : ""}</option>`
+  ).join("");
+
+  const comparison = getwellCompareVisits(p, compareA, compareB);
+
+  host.innerHTML = `
+    <div class="compare-picker">
+      <div class="compare-field">
+        <label for="compareA">Compare</label>
+        <select id="compareA" class="metric-select" onchange="setCompare('a',this.value)">${options(compareA)}</select>
+      </div>
+      <span class="compare-with">with</span>
+      <div class="compare-field">
+        <label for="compareB">&nbsp;</label>
+        <select id="compareB" class="metric-select" onchange="setCompare('b',this.value)">${options(compareB)}</select>
+      </div>
+      <button class="primary compare-report" onclick="generateProgressReport()">Generate Progress Report</button>
+    </div>
+    ${renderComparisonBody(comparison)}
+  `;
+}
+
+
+function setCompare(side, value){
+  if(side === "a") compareA = value; else compareB = value;
+  renderVisitCompare();
+}
+
+
+function comparisonValueCell(value, decimals, unit){
+  if(value === null || value === undefined || !Number.isFinite(value)) return EM_DASH;
+  return `${getwellFormatMetric(value, decimals)}${unit ? " " + escapeHtml(unit) : ""}`;
+}
+
+
+function renderComparisonBody(comparison){
+  if(!comparison) return `<div class="notif-empty">Select two visits.</div>`;
+  if(comparison.sameVisit) return `<div class="notif-empty">Select two different visits.</div>`;
+
+  const kg = value => value === null ? EM_DASH : `${getwellFormatMetric(value, 1)} kg`;
+
+  const changeClass = comparison.weightChange === null ? ""
+    : comparison.weightChange < 0 ? " good"
+    : comparison.weightChange > 0 ? " warn" : "";
+
+  const heightRow = comparison.height
+    ? `<div class="compare-stat"><div class="label">Height</div><div class="value">${getwellFormatMetric(comparison.height, 0)} cm</div><div class="note">From the patient record</div></div>`
+    : `<div class="compare-stat"><div class="label">Height</div><div class="value">${EM_DASH}</div><div class="note">Not recorded</div></div>`;
+
+  const summary = `
+    <div class="compare-summary">
+      <div class="compare-stat">
+        <div class="label">${escapeHtml(comparison.earlier.label)} · earlier</div>
+        <div class="value">${kg(comparison.earlier.weight)}</div>
+        <div class="note">${escapeHtml(comparison.earlier.date)}</div>
+      </div>
+      <div class="compare-stat">
+        <div class="label">${escapeHtml(comparison.later.label)} · later</div>
+        <div class="value">${kg(comparison.later.weight)}</div>
+        <div class="note">${escapeHtml(comparison.later.date)}</div>
+      </div>
+      <div class="compare-stat">
+        <div class="label">Total weight change</div>
+        <div class="value${changeClass}">${getwellSignedValue(comparison.weightChange, 1, "kg")}</div>
+        <div class="note">${comparison.days !== null ? `over ${comparison.days} day${comparison.days === 1 ? "" : "s"}` : "Later minus earlier"}</div>
+      </div>
+      <div class="compare-stat">
+        <div class="label">Percentage change</div>
+        <div class="value${changeClass}">${comparison.weightPercent === null ? EM_DASH : getwellSignedValue(comparison.weightPercent, 1, "%")}</div>
+        <div class="note">Against the earlier weight</div>
+      </div>
+      ${heightRow}
+    </div>`;
+
+  if(!comparison.hasComposition){
+    return summary + `<p class="progress-note">Neither visit has Arboleaf measurements, so only weight is compared. The progress report will still generate.</p>`;
+  }
+
+  const rows = comparison.metrics.map(metric => `
+    <tr${metric.core ? "" : ` class="compare-extra"`}>
+      <td>${escapeHtml(metric.name)}${metric.unit ? ` <span class="compare-unit">(${escapeHtml(metric.unit)})</span>` : ""}</td>
+      <td>${comparisonValueCell(metric.earlier, metric.decimals, "")}</td>
+      <td>${comparisonValueCell(metric.later, metric.decimals, "")}</td>
+      <td class="${{good:"change-good", warn:"change-warn"}[getwellChangeTone(metric.change, metric.better)] || ""}">${
+        metric.change === null ? EM_DASH : getwellSignedValue(metric.change, metric.decimals, "")
+      }</td>
+    </tr>`).join("");
+
+  return summary + `
+    <div class="table-wrap" style="margin-top:14px">
+      <table class="table compact">
+        <thead><tr>
+          <th>Measurement</th>
+          <th>${escapeHtml(comparison.earlier.label)}</th>
+          <th>${escapeHtml(comparison.later.label)}</th>
+          <th>Change</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <p class="progress-note">A measurement recorded at only one of the two visits shows ${EM_DASH} rather than an invented value.</p>`;
+}
+
+
+/* =========================================================
+   PROGRESS REPORT (PDF)
+   ---------------------------------------------------------
+   Basic weight-change report when the two visits carry no
+   Arboleaf data, and the same report plus a full
+   body-composition comparison table when they do. Laid out at
+   readable sizes, flowing onto a second page rather than
+   shrinking the type.
+========================================================= */
+
+function generateProgressReport(){
+  const comparison = getwellCompareVisits(p, compareA, compareB);
+
+  if(!comparison || comparison.sameVisit){
+    getwellNotify("Select two different visits before generating the report.", "error");
+    return;
+  }
+
+  const jsPDFClass = window.jspdf && window.jspdf.jsPDF;
+  if(!jsPDFClass){
+    getwellNotify("The PDF library could not be loaded, so the report cannot be generated right now.", "error");
+    return;
+  }
+
+  const doc = new jsPDFClass({unit:"pt", format:"a4"});
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const left = 54;
+  const right = pageWidth - 54;
+  let y = 0;
+
+  const NAVY = [8, 20, 42];
+  const BLUE = [37, 99, 235];
+  const MUTED = [100, 116, 139];
+  const LINE = [217, 228, 242];
+
+  const room = needed => {
+    if(y + needed <= pageHeight - 60) return;
+    doc.addPage();
+    y = 56;
+  };
+
+  /* ---- header band ---- */
+  doc.setFillColor(...BLUE);
+  doc.rect(0, 0, pageWidth, 96, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.text("GETWELL CLINIC", left, 44);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.text("Weight Loss Progress Report", left, 66);
+
+  doc.setFontSize(9);
+  doc.text(
+    `Generated ${new Date().toLocaleDateString("en-GB", {day:"numeric", month:"short", year:"numeric"})}`,
+    right, 66, {align:"right"}
+  );
+
+  y = 132;
+
+  const heading = text => {
+    room(46);
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(getwellPdfText(text), left, y);
+    y += 8;
+    doc.setDrawColor(...LINE);
+    doc.setLineWidth(1);
+    doc.line(left, y, right, y);
+    y += 20;
+  };
+
+  const pair = (label, value) => {
+    room(22);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...MUTED);
+    doc.text(getwellPdfText(label), left, y);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(getwellPdfText(value), left + 190, y);
+    y += 20;
+  };
+
+  /* ---- patient ---- */
+  heading("PATIENT");
+  pair("Name", (p.name || "-").toUpperCase());
+  pair("Patient ID", p.id || "-");
+  pair("Height", comparison.height ? `${getwellFormatMetric(comparison.height, 0)} cm` : "-");
+  pair("Programme start", getwellShortVisitDate(p.startDate, true) || "-");
+  y += 10;
+
+  /* ---- the two visits ---- */
+  heading("VISITS COMPARED");
+
+  const visitBlock = (title, side) => {
+    room(76);
+    doc.setFillColor(248, 251, 255);
+    doc.setDrawColor(...LINE);
+    doc.roundedRect(left, y - 14, right - left, 62, 6, 6, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...BLUE);
+    doc.text(getwellPdfText(title), left + 14, y + 2);
+    doc.setTextColor(...NAVY);
+    doc.setFontSize(11);
+    doc.text(getwellPdfText(`${side.label} - ${side.date}`), left + 14, y + 20);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...MUTED);
+    doc.text(
+      side.weight === null ? "Weight not recorded" : `Weight: ${getwellFormatMetric(side.weight, 1)} kg`,
+      left + 14, y + 36
+    );
+    y += 76;
+  };
+
+  visitBlock("EARLIER VISIT", comparison.earlier);
+  visitBlock("LATER VISIT", comparison.later);
+  y += 6;
+
+  /* ---- weight change ---- */
+  heading("WEIGHT CHANGE");
+  pair("Earlier weight", comparison.earlier.weight === null ? "-" : `${getwellFormatMetric(comparison.earlier.weight, 1)} kg`);
+  pair("Later weight",   comparison.later.weight   === null ? "-" : `${getwellFormatMetric(comparison.later.weight, 1)} kg`);
+
+  room(52);
+  const lost = comparison.weightChange !== null && comparison.weightChange < 0;
+  doc.setFillColor(lost ? 240 : 255, lost ? 253 : 247, lost ? 244 : 237);
+  doc.setDrawColor(lost ? 134 : 242, lost ? 239 : 178, lost ? 172 : 74);
+  doc.roundedRect(left, y - 12, right - left, 54, 6, 6, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...MUTED);
+  doc.text("TOTAL WEIGHT CHANGE", left + 14, y + 4);
+  doc.text("PERCENTAGE CHANGE", left + (right - left) / 2 + 14, y + 4);
+  doc.setFontSize(18);
+  doc.setTextColor(lost ? 22 : 180, lost ? 163 : 83, lost ? 74 : 9);
+  doc.text(getwellPdfText(getwellSignedValue(comparison.weightChange, 1, "kg")), left + 14, y + 28);
+  doc.text(
+    getwellPdfText(comparison.weightPercent === null ? "-" : getwellSignedValue(comparison.weightPercent, 1, "%")),
+    left + (right - left) / 2 + 14, y + 28
+  );
+  y += 76;
+
+  if(comparison.days !== null){
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...MUTED);
+    doc.text(`Measured ${comparison.days} day${comparison.days === 1 ? "" : "s"} apart.`, left, y);
+    y += 24;
+  }
+
+  /* ---- body composition, only when there is something ---- */
+  if(comparison.hasComposition){
+    heading("BODY COMPOSITION COMPARISON");
+
+    const columns = [left, left + 210, left + 310, left + 410];
+
+    const tableHeader = () => {
+      room(30);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...MUTED);
+      doc.text("MEASUREMENT", columns[0], y);
+      doc.text(getwellPdfText(comparison.earlier.label.toUpperCase()), columns[1], y);
+      doc.text(getwellPdfText(comparison.later.label.toUpperCase()), columns[2], y);
+      doc.text("CHANGE", columns[3], y);
+      y += 8;
+      doc.setDrawColor(...LINE);
+      doc.line(left, y, right, y);
+      y += 16;
+    };
+
+    tableHeader();
+
+    comparison.metrics.forEach(metric => {
+      if(y > pageHeight - 90){
+        doc.addPage();
+        y = 56;
+        tableHeader();
+      }
+
+      const show = value => value === null ? "-" : getwellFormatMetric(value, metric.decimals);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...NAVY);
+      doc.text(getwellPdfText(metric.name + (metric.unit ? ` (${metric.unit})` : "")), columns[0], y);
+      doc.text(show(metric.earlier), columns[1], y);
+      doc.text(show(metric.later), columns[2], y);
+
+      if(metric.change === null){
+        doc.setTextColor(...MUTED);
+        doc.text("-", columns[3], y);
+      }else{
+        /* Green means progress for THIS measurement: losing fat
+           is progress, losing muscle is not. */
+        const tone = getwellChangeTone(metric.change, metric.better);
+        if(tone === "good")      doc.setTextColor(22, 163, 74);
+        else if(tone === "warn") doc.setTextColor(180, 83, 9);
+        else                     doc.setTextColor(...NAVY);
+        doc.setFont("helvetica", "bold");
+        doc.text(getwellPdfText(getwellSignedValue(metric.change, metric.decimals, "")), columns[3], y);
+      }
+
+      y += 19;
+    });
+
+    y += 6;
+    room(30);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...MUTED);
+    doc.text(
+      "A dash means the measurement was not recorded at that visit. No value has been estimated or carried across.",
+      left, y, {maxWidth: right - left}
+    );
+    y += 20;
+  }
+
+  /* ---- footer on every page ---- */
+  const pages = doc.internal.getNumberOfPages();
+  for(let page = 1; page <= pages; page++){
+    doc.setPage(page);
+    doc.setDrawColor(...LINE);
+    doc.line(left, pageHeight - 46, right, pageHeight - 46);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    doc.text(getwellPdfText(`${p.name || ""} - ${p.id || ""}`), left, pageHeight - 30);
+    doc.text(`Page ${page} of ${pages}`, right, pageHeight - 30, {align:"right"});
+  }
+
+  const safeName = String(p.name || p.id || "patient").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  doc.save(`Getwell-progress-${safeName}-${comparison.earlier.dateKey}-to-${comparison.later.dateKey}.pdf`);
+
+  getwellLogActivity(
+    "Export",
+    "Progress Report",
+    `${p.id} · ${p.name || ""}`,
+    `${comparison.earlier.label} (${comparison.earlier.dateKey}) vs ${comparison.later.label} (${comparison.later.dateKey})`
+  );
+}
+
+
+function renderFiles(){
+  const files=[];
+  (p.visits||[]).forEach(v=>{
+    if(v.pdfName || v.arboleafText || v.pdfFile) files.push({
+      type:"PDF",date:getwellDateKey(v.dateKey),name:(v.pdfFile&&v.pdfFile.name)||v.pdfName||"Arboleaf PDF",visit:getwellVisitLabel(p,v),
+      text:v.arboleafText||"",
+      url:(v.pdfFile&&v.pdfFile.url)||"",
+      storage:(v.pdfFile&&v.pdfFile.storage)||""
+    });
+    (v.photos||[]).forEach((photo,i)=>files.push({
+      type:"Photo",date:getwellDateKey(v.dateKey),name:photo.name||`Photo ${i+1}`,visit:getwellVisitLabel(p,v),
+      data:photo.data||"", url:photo.url||"", storage:photo.storage||"local"
+    }));
+  });
+
+  /* Drive-hosted files survive a refresh; local ones live only in this browser. */
+  const badge = file => file.storage==="drive"
+    ? `<span class="badge green" style="margin-left:6px">Drive</span>`
+    : (file.storage==="local" ? `<span class="badge orange" style="margin-left:6px">This device only</span>` : "");
+
+  const openLink = file => file.url
+    ? `<a class="secondary" style="padding:7px 9px" href="${escapeHtml(file.url)}" target="_blank" rel="noopener">Open →</a>`
+    : "";
+
+  secFilesContent.innerHTML=files.length
+    ? files.map(file=> file.type==="Photo"
+      ? `<div class="row"><div class="avatar-small">📷</div><div class="row-main"><div class="row-title">${escapeHtml(file.name)}${badge(file)}</div><div class="row-sub">${escapeHtml(file.date||"")} · ${escapeHtml(file.visit||"")}</div></div>${file.url||file.data?`<img src="${escapeHtml(file.url||file.data)}" style="width:70px;height:70px;object-fit:cover;border-radius:10px">`:""}${openLink(file)}</div>`
+      : `<div class="row"><div class="avatar-small">PDF</div><div class="row-main"><div class="row-title">${escapeHtml(file.name)}${badge(file)}</div><div class="row-sub">${escapeHtml(file.date||"")} · ${escapeHtml(file.visit||"")} · ${file.text?"Arboleaf text extracted":"File recorded"}</div></div>${openLink(file)}</div>`
+    ).join("")
+    : `<div class="notif-empty">No files or photos attached to visits.</div>`;
+}
+
+function renderAppointments(){
+  const rows=(p.appointments||[]).slice().sort((a,b)=>(`${a.date||""} ${a.time||""}`).localeCompare(`${b.date||""} ${b.time||""}`));
+  patientAppointmentRows.innerHTML=rows.map(a=>`
+    <tr>
+      <td>${escapeHtml(a.date||"—")}</td>
+      <td>${escapeHtml(a.time||"—")}</td>
+      <td>${escapeHtml(a.type||"—")}</td>
+      <td>${escapeHtml(a.doctor||p.doctor||"—")}</td>
+      <td><span class="badge ${a.status==="Completed"?"green":a.status==="No Show"?"red":"blue"}">${escapeHtml(a.status||"Upcoming")}</span></td>
+      <td>${escapeHtml(a.notes||"—")}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="6" class="notif-empty">No appointments recorded.</td></tr>`;
+}
+
+/* ---------------------------------------------------------
+   DRIVE-BACKED ATTACHMENTS
+
+   A Google Sheets cell holds at most 50,000 characters, so a
+   base64 photo cannot be stored in the record — the whole
+   save would be rejected. Binaries go to Google Drive and
+   only {id, name, url} is persisted.
+
+   If Drive is unreachable the data URL is kept locally so
+   nothing is lost, and the user is told the file is on this
+   device only.
+--------------------------------------------------------- */
+
+function dataUrlToBase64(dataUrl){
+  const value = String(dataUrl || "");
+  const comma = value.indexOf(",");
+  return comma >= 0 ? value.slice(comma + 1) : value;
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(dataUrlToBase64(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function storeAttachment(attachment){
+  /*
+    attachment: {name, mimeType, dataBase64, dataUrl}
+    Returns a persistable descriptor.
+  */
+  const uploaded = await getwellUploadFile({
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    dataBase64: attachment.dataBase64,
+    patientId: p.id,
+    visitId: editingVisitId || ""
+  });
+
+  if(uploaded.ok && uploaded.file){
+    return {
+      name: attachment.name,
+      driveId: uploaded.file.id,
+      url: uploaded.file.url,
+      storage: "drive"
+    };
+  }
+
+  console.error("Drive upload failed for " + attachment.name + ": " + uploaded.error);
+
+  return {
+    name: attachment.name,
+    data: attachment.dataUrl || "",
+    storage: "local",
+    uploadError: uploaded.error || "Upload failed"
+  };
+}
+
+function resizeImageFile(file,maxSize=1000,quality=.72){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const scale=Math.min(1,maxSize/Math.max(img.width,img.height));
+        const canvas=document.createElement("canvas");
+        canvas.width=Math.round(img.width*scale);
+        canvas.height=Math.round(img.height*scale);
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        resolve({name:file.name,data:canvas.toDataURL("image/jpeg",quality)});
+      };
+      img.onerror=reject;
+      img.src=reader.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveVisit(){
+  if(!vDate.value||!vType.value.trim()){alert("Visit date and type are required.");return}
+  if(!updateVisitTotal()) return;
+
+  const old=editingVisitId?(p.visits||[]).find(x=>x.id===editingVisitId):null;
+  let pdfName=old?.pdfName||"";
+  let pdfFile=old?.pdfFile||null;
+
+  /*
+    THE REVIEW GRID IS THE SOURCE OF TRUTH.
+
+    The PDF was already read when it was selected, and whatever
+    was recovered was put into the grid for staff to confirm or
+    correct. What gets stored on the visit is what the grid
+    holds now — never a raw OCR guess, and never a value
+    carried over from another visit or from the patient record.
+
+    Clearing a box removes that measurement; the rest stay.
+  */
+  const arboleafMetrics=collectArboleafMetrics();
+  const arboleafText=arboleafLastText||old?.arboleafText||"";
+
+  if(vPdf.files?.[0]){
+    pdfName=vPdf.files[0].name;
+
+    /*
+      Keep the actual PDF, not just its name, so Files &
+      Photos can still open it after a refresh.
+    */
+    try{
+      pdfFile=await storeAttachment({
+        name:vPdf.files[0].name,
+        mimeType:"application/pdf",
+        dataBase64:await fileToBase64(vPdf.files[0]),
+        dataUrl:""
+      });
+    }catch(error){
+      console.error("Unable to store the Arboleaf PDF:",error);
+    }
+  }
+
+  let photos=Array.isArray(old?.photos)?[...old.photos]:[];
+  let localOnlyCount=0;
+
+  if(vPhotos.files?.length){
+    const newPhotos=[];
+    for(const file of Array.from(vPhotos.files).slice(0,5)){
+      try{
+        const resized=await resizeImageFile(file);
+        const stored=await storeAttachment({
+          name:resized.name,
+          mimeType:"image/jpeg",
+          dataBase64:dataUrlToBase64(resized.data),
+          dataUrl:resized.data
+        });
+        if(stored.storage==="local") localOnlyCount++;
+        newPhotos.push(stored);
+      }catch(e){ console.error(e); }
+    }
+    photos=photos.concat(newPhotos);
+  }
+
+  if(localOnlyCount){
+    getwellNotify(
+      localOnlyCount+" photo(s) could not be uploaded to Google Drive and are stored on this device only.",
+      "error"
+    );
+  }
+
+  const billing={
+    injection:{price:editingCharges.filter(c=>c.category==="Injection").reduce((s,c)=>s+(+c.price||0),0),notes:""},
+    medication:{price:editingCharges.filter(c=>c.category==="Medication").reduce((s,c)=>s+(+c.price||0),0),notes:""},
+    treatment:{price:editingCharges.filter(c=>c.category==="Treatment").reduce((s,c)=>s+(+c.price||0),0),notes:""},
+    other:{price:editingCharges.filter(c=>c.category==="Additional").reduce((s,c)=>s+(+c.price||0),0),notes:""},
+    panel:+vPanelEl.value||0,
+    selfPay:+vSelfEl.value||0
+  };
+
+  const firstByCategory=(category)=>editingCharges.find(c=>c.category===category);
+  const v={
+    ...(old||{}),
+    id:old?.id||getwellNextVisitId(),
+    /*
+      DATE-ONLY. vDate.value is already "YYYY-MM-DD" straight
+      from <input type="date">; getwellDateKey() is a guard, not
+      a conversion. It is never turned into a Date object and
+      never passed through toISOString(), which is what used to
+      turn 13-Nov-2025 into 2025-11-12T16:00:00.000Z.
+    */
+    dateKey:getwellDateKey(vDate.value),
+    visit:vNumber.value,
+    /* Now a Settings-driven <select>. */
+    type:String(vType.value||"").trim(),
+    weight:vWeight.value||"—",
+    invoiceReference:vInvoiceRef.value,
+    injection:firstByCategory("Injection")?.itemName||"",
+    dose:"",
+    medication:firstByCategory("Medication")?.itemName||"",
+    additionalTreatment:firstByCategory("Treatment")?.itemName||"",
+    otherName:firstByCategory("Additional")?.itemName||"",
+    notes:vNotes.value,
+    pdfName,
+    pdfFile,
+    arboleafText,
+    arboleafMetrics,
+    photos,
+    charges:editingCharges.map(c=>({...c})),
+    status:old?.status||"Completed",
+    billing
+  };
+
+  /* p.visits can be absent on a record typed straight into the Sheet. */
+  if(!Array.isArray(p.visits)) p.visits=[];
+
+  if(old)p.visits[p.visits.indexOf(old)]=v;
+  else p.visits.unshift(v);
+
+  /*
+    VISIT NUMBERS ARE DERIVED FROM THE VISIT DATE.
+
+    A visit entered today but dated last month drops into its
+    correct chronological place, and every visit after it moves
+    up one. This only ever rewrites the visit NUMBER column;
+    VisitID is untouched, no visit is added or removed, and the
+    save below is still the same ID-based upsert.
+  */
+  getwellRenumberVisits(p);
+  v.visit=getwellVisitLabel(p,v);
+
+  /*
+    currentWeight tracks the LATEST visit chronologically, not
+    whichever visit was typed in last, so back-filling an old
+    visit cannot rewrite the patient's current weight.
+  */
+  const newestWeighed=getwellPatientWeightSeries(p).slice(-1)[0];
+  if(newestWeighed)p.currentWeight=newestWeighed.value;
+
+  /* New visits may create one suggested follow-up. Existing future
+     appointments are never duplicated or overwritten. */
+  let suggestedAppointment=null;
+  if(!old){
+    suggestedAppointment=getwellCreateSuggestedAppointment(p,v);
+  }
+
+  /*
+    ROOT CAUSE OF "THE APP SAID THE VISIT WAS SAVED BUT THE
+    VISITS SHEET IS EMPTY"
+    -------------------------------------------------------
+    upsertPatient() returns the outcome of the Google Sheets
+    write. This function used to throw that value away and
+    show the green "Visit saved successfully." toast no matter
+    what came back -- so a visit that never reached the sheet
+    was indistinguishable from one that did.
+
+    The result is now inspected. The success message appears
+    only when Code.gs has read the Visit ID back off a row in
+    the Visits sheet, and the modal stays open on failure so
+    the work is not lost behind a closed dialog.
+  */
+  const saveResult = await upsertPatient(p);
+
+  getwellLogActivity(
+    old?"Edit":"Add",
+    "Visit",
+    `${v.id} · ${p.name||p.id}`,
+    `${v.dateKey||""} · ${v.type||""} · ${money(visitTotal(v))}` +
+      (suggestedAppointment?` · follow-up suggested ${suggestedAppointment.date}`:"")
+  );
+
+  if(saveResult && saveResult.ok === false){
+    /* saveStore() has already shown the detailed reason. */
+    getwellNotify(
+      `Visit ${v.id} was NOT stored in the Visits sheet. It is kept on this device and will be retried.`,
+      "error"
+    );
+    p=getPatient(p.id);
+    refresh();
+    return;
+  }
+
+  getwellNotify(
+    suggestedAppointment
+      ? `Visit ${v.id} saved to Google Sheets. Suggested follow-up: ${suggestedAppointment.date}`
+      : `Visit ${v.id} saved to Google Sheets.`,
+    "success"
+  );
+
+  p=getPatient(p.id);
+  closeVisit();
+  refresh();
+}
+
+function openClaimModal(claimId=null){
+  const c=claimId?ensureClaims(p).find(x=>x.id===claimId):null;
+  editingClaimId=c?.id||null;
+  claimDateInput.value=getwellDateKey(c?.claimDate)||getwellTodayKey();
+  claimAmountInput.value=c?.amount||"";
+  claimNotesInput.value=c?.notes||"";
+  claimVisitInput.innerHTML=`<option value="">No specific visit</option>`+
+    (p.visits||[]).map(v=>`<option value="${escapeHtml(v.id)}" ${c?.visitId===v.id?"selected":""}>${escapeHtml(v.visit)} · ${escapeHtml(getwellDateKey(v.dateKey))} · ${money(visitTotal(v))}</option>`).join("");
+  claimModalTitle.textContent=c?"Edit Claim":"Add Claim";
+  document.getElementById("deleteClaimButton").style.display=c?"inline-flex":"none";
+  claimModal.classList.add("show");
+}
+
+function closeClaimModal(){claimModal.classList.remove("show");editingClaimId=null;}
+
+async function saveClaim(){
+  const a=+claimAmountInput.value||0;
+  if(a<=0||!claimDateInput.value){alert("Claim date and amount are required.");return}
+
+  const arr=ensureClaims(p);
+  const old=editingClaimId?arr.find(x=>x.id===editingClaimId):null;
+
+  const obj={
+    ...(old||{}),
+    id:old?.id||getwellNextClaimId(),
+    amount:a,
+    claimDate:getwellDateKey(claimDateInput.value),
+    visitId:claimVisitInput.value,
+    notes:claimNotesInput.value.trim()
+  };
+
+  if(old)arr[arr.indexOf(old)]=obj;
+  else arr.push(obj);
+
+  const saveResult=await upsertPatient(p);
+  getwellLogActivity(
+    old?"Edit":"Add",
+    "Claim",
+    `${obj.id} · ${p.name||p.id}`,
+    `${money(obj.amount)} · ${obj.claimDate||""}`
+  );
+  if(!getwellAnnounceSave(saveResult,`Claim ${obj.id} saved to Google Sheets.`)){
+    p=getPatient(p.id);
+    refresh();
+    return;
+  }
+  p=getPatient(p.id);
+  closeClaimModal();
+  refresh();
+}
+
+function signedBalanceLabel(balance){
+  return balance < 0 ? "OVERCLAIMED" : "BALANCE TO CLAIM";
+}
+
+function refresh(){
+  p=getPatient(id);
+  if(!p)return;
+
+  patientAvatar.innerHTML=getwellPatientAvatar(p);
+  renderPatientPhotoControls();
+  patientName.textContent=p.name;
+  patientId.textContent=p.id;
+  patientStatus.textContent=p.status||"Active";
+  patientPaymentBadge.textContent=getPanelName(p);
+  programStart.textContent=getwellDateKey(p.startDate)||"—";
+  lastVisit.textContent=getwellDateKey(latestVisit(p)?.dateKey)||"—";
+
+  const f=finance(p);
+  const balanceClass=f.balance<0?"red":"balance";
+
+  /*
+    NOTE: this must go through getElementById.
+    The bare global `finance` resolves to app.js's
+    finance() FUNCTION, not to <div id="finance">, because a
+    function declaration shadows the id-based global. The old
+    `finance.innerHTML = ...` therefore set a property on the
+    function object and rendered nothing, with no error.
+  */
+  document.getElementById("finance").innerHTML=patientUsesPanel(p)
+    ? `<div class="finance-card"><div class="label">GRAND TOTAL</div><div class="value">${money(f.grand)}</div></div>
+       <div class="finance-card"><div class="label">TOTAL CLAIMED</div><div class="value">${money(f.claimed)}</div></div>
+       <div class="finance-card ${balanceClass}"><div class="label">${signedBalanceLabel(f.balance)}</div><div class="value">${money(Math.abs(f.balance))}</div></div>`
+    : `<div class="finance-card"><div class="label">GRAND TOTAL</div><div class="value">${money(f.grand)}</div></div>
+       <div class="finance-card"><div class="label">TOTAL INJECTION</div><div class="value">${money(f.injection)}</div></div>
+       <div class="finance-card"><div class="label">TOTAL MEDICATION</div><div class="value">${money(f.medication)}</div></div>`;
+
+  breakdown.innerHTML=`
+    <div class="break"><span>Total Injection</span><strong>${money(f.injection)}</strong></div>
+    <div class="break"><span>Total Medication</span><strong>${money(f.medication)}</strong></div>
+    <div class="break"><span>Total Treatment</span><strong>${money(f.treatment)}</strong></div>
+    <div class="break" title="Calculated from the Additional charge category"><span>Total Miscellaneous</span><strong>${money(f.miscellaneous)}</strong></div>
+    <div class="break"><span>Self-Pay / Co-Payment</span><strong>${money(f.selfpay)}</strong></div>
+  `;
+
+  /*
+    Both lists read from getwellPatientVisitsSorted(), so they
+    are always oldest -> newest by VISIT DATE and always show
+    the derived visit number. The order rows happen to sit in
+    on the patient record, and any stale number stored against
+    a visit, are both ignored for display.
+  */
+  const sortedVisits=getwellPatientVisitsSorted(p);
+
+  overviewVisits.innerHTML=sortedVisits.map(row=>{
+    const v=row.visit;
+    return `
+    <div class="row"><div class="avatar-small">${getwellPatientAvatar(p)}</div>
+      <div class="row-main"><div class="row-title">${escapeHtml(row.label)} · ${escapeHtml(v.type||"")}</div>
+      <div class="row-sub">${escapeHtml(getwellShortVisitDate(row.dateKey,true))} · ${money(visitTotal(v))}${row.hasArboleaf?" · Arboleaf":(v.pdfName?" · Arboleaf PDF":"")}</div></div>
+      <button class="secondary" style="padding:7px 9px" onclick="openEditVisit('${escapeHtml(v.id)}')">Edit →</button>
+    </div>`;
+  }).join("")||`<div class="notif-empty">No visits.</div>`;
+
+  /*
+    The Visits tab now shows the Visit-by-Visit History table
+    (rendered by renderVisitProgressTable) instead of the older
+    "Visit History" table this block filled, so <tbody id="visitRows">
+    is no longer in the page. The renderer is kept, guarded on the
+    element existing, so nothing is lost if that table is ever put
+    back on a page.
+  */
+  const visitRowsHost=document.getElementById("visitRows");
+  if(visitRowsHost){
+    visitRowsHost.innerHTML=sortedVisits.map(row=>{
+      const v=row.visit;
+      return `
+      <tr><td>${escapeHtml(getwellShortVisitDate(row.dateKey,true))}</td><td>${escapeHtml(row.label)}</td><td>${escapeHtml(v.type||"—")}</td>
+      <td>${escapeHtml(v.injection||v.charges?.find(c=>c.category==="Injection")?.itemName||"—")}</td>
+      <td>${escapeHtml(v.weight||"—")}</td><td>${money(visitTotal(v))}</td><td>${escapeHtml(v.status||"Completed")}</td>
+      <td><button class="secondary" style="padding:7px 9px" onclick="openEditVisit('${escapeHtml(v.id)}')">Edit</button></td></tr>`;
+    }).join("")||`<tr><td colspan="8" class="notif-empty">No visits.</td></tr>`;
+  }
+
+  const claimBalance=f.balance;
+  claimSummary.innerHTML=`<div class="finance-card"><div class="label">GRAND TOTAL</div><div class="value">${money(f.grand)}</div></div>
+    <div class="finance-card"><div class="label">TOTAL CLAIMED</div><div class="value">${money(f.claimed)}</div></div>
+    <div class="finance-card ${claimBalance<0?"red":"balance"}"><div class="label">${signedBalanceLabel(claimBalance)}</div><div class="value">${money(Math.abs(claimBalance))}</div></div>`;
+
+  claimRows.innerHTML=ensureClaims(p).map(c=>`
+    <tr><td>${escapeHtml(getwellDateKey(c.claimDate)||"—")}</td><td>${escapeHtml(((p.visits||[]).find(v=>v.id===c.visitId)
+      ? getwellVisitLabel(p,(p.visits||[]).find(v=>v.id===c.visitId))
+      : "No specific visit"))}</td>
+    <td>${money(c.amount)}</td><td>${escapeHtml(c.notes||"—")}</td>
+    <td><button class="secondary" style="padding:7px 9px" onclick="openClaimModal('${escapeHtml(c.id)}')">Edit</button></td></tr>
+  `).join("")||`<tr><td colspan="5" class="notif-empty">No claims recorded.</td></tr>`;
+
+  /* The progress charts are rebuilt from the freshly re-read
+     patient on every refresh(), which is what makes an added,
+     edited or deleted visit show up immediately, and what makes
+     a page reload or a re-login redraw them from the Google
+     Sheets-backed data. */
+  getwellChartPointOut();   /* never leave a tooltip floating over a redraw */
+  renderWeightProgress();
+  renderBodyCompositionProgress();
+  renderVisitCompare();
+  renderVisitProgressTable();
+
+  renderBodyComposition();
+  renderFiles();
+  renderAppointments();
+}
+
+document.getElementById("root").innerHTML=shell("Patient Profile","patients",`
+  <a class="back" href="patients.html">← Back to Patients</a>
+  <div class="patient-hero">
+    <div class="patient-main"><div class="patient-photo-wrap">
+        <div class="patient-avatar" id="patientAvatar"></div>
+        <button type="button" class="photo-edit-button" id="patientPhotoButton"
+                title="Change profile photo" aria-label="Change profile photo"
+                onclick="openPatientPhoto()">✎</button>
+      </div>
+      <div class="patient-heading"><h1 id="patientName"></h1><div class="meta"><span id="patientId"></span><span class="badge green" id="patientStatus"></span><span class="panel-chip" id="patientPaymentBadge"></span></div></div>
+    </div>
+    <div class="hero-details"><div class="hero-detail"><span class="hero-label">Program Started</span><span id="programStart" class="hero-value"></span></div>
+      <div class="hero-detail"><span class="hero-label">Last Visit</span><span id="lastVisit" class="hero-value"></span></div>
+      <button class="secondary" onclick="openEditPatient()">✎ Edit Patient</button>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-head"><div><h2>Program Financial Summary</h2><p>Automatically calculated from visits and claims.</p></div></div><div class="card-body"><div class="finance-grid" id="finance"></div><div class="breakdown" id="breakdown"></div></div></div>
+
+  <div class="patient-tabs">
+    <button class="active" onclick="showSection('overview',this)">Overview</button>
+    <button onclick="showSection('visits',this)">Visits</button>
+    <button onclick="showSection('composition',this)">Body Composition</button>
+    <button onclick="showSection('appointments',this)">Appointments</button>
+    <button data-tab="claims" onclick="showSection('claims',this)">Panel Claims</button>
+    <button onclick="showSection('files',this)">Files & Photos</button>
+  </div>
+
+  <section id="sec-overview" class="card"><div class="card-head"><div><h2>Recent Visits</h2><p>Edit any past visit using the same form as Add Visit.</p></div><button class="primary" onclick="openAddVisit()">＋ Add Visit</button></div><div id="overviewVisits"></div></section>
+
+  <!-- ===============================================================
+       VISITS TAB
+
+       Holds the Visit-by-Visit History that used to sit on the
+       main profile page. Same component, same data, same Edit
+       and Add Visit buttons -- only its location changed. It
+       replaces the old "Visit History" table that duplicated it,
+       so this tab now has a single visit table.
+  ================================================================ -->
+  <section id="sec-visits" style="display:none">
+    <section class="card progress-card" id="progress-visits" style="margin-top:14px">
+      <div class="card-head">
+        <div><h2>Visit-by-Visit History</h2><p>Oldest first. Every point on the Body Composition charts comes from one of these visits.</p></div>
+        <button class="secondary" onclick="openAddVisit()">＋ Add Visit</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table compact">
+          <thead><tr>
+            <th>Visit</th><th>Date</th><th>Weight (kg)</th><th>BMI</th>
+            <th>Body Fat (%)</th><th>Skeletal Muscle (kg)</th><th>Arboleaf</th><th></th>
+          </tr></thead>
+          <tbody id="visitProgressRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- ===============================================================
+       BODY COMPOSITION TAB
+
+       Weight Progress, Body Composition Progress and Compare 2
+       Visits were moved here from the main profile page. The
+       components, their charts, their calculations and the
+       progress report are unchanged -- only their location.
+  ================================================================ -->
+  <section id="sec-composition" style="display:none">
+    <div class="section-band" style="margin-top:14px">
+      <h2>Body Composition</h2>
+      <p>Weight progress, Arboleaf measurements, visit comparison and the progress report — all built from this patient's own visits.</p>
+    </div>
+    <section class="card progress-card" id="progress-weight" style="margin-top:14px">
+      <div class="card-head">
+        <div><h2>Weight Progress</h2><p>Weight recorded at each visit</p></div>
+      </div>
+      <div class="card-body" id="weightProgress"></div>
+    </section>
+    <section class="card progress-card" id="progress-composition" style="margin-top:14px">
+      <div class="card-head">
+        <div><h2>Body Composition Progress</h2><p>Arboleaf measurements recorded at each visit</p></div>
+      </div>
+      <div class="card-body" id="bodyCompositionProgress"></div>
+    </section>
+    <section class="card progress-card" id="progress-compare" style="margin-top:14px">
+      <div class="card-head">
+        <div>
+          <h2>Compare 2 Visits</h2>
+          <p>Pick any two visits — they do not have to be next to each other, and the order does not matter.</p>
+        </div>
+      </div>
+      <div class="card-body" id="visitCompare"></div>
+    </section>
+    <section class="card" style="margin-top:14px"><div class="card-head"><div><h2>Arboleaf Measurements</h2><p>Arboleaf metrics parsed from uploaded visit PDFs.</p></div></div><div id="composition" class="card-body"></div></section>
+  </section>
+
+  <section id="sec-appointments" class="card" style="display:none;margin-top:14px"><div class="card-head"><div><h2>Appointments</h2><p>Appointment history for this patient.</p></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Doctor</th><th>Status</th><th>Notes</th></tr></thead><tbody id="patientAppointmentRows"></tbody></table></div></section>
+
+  <section id="sec-claims" class="card" style="display:none;margin-top:14px"><div class="card-head"><div><h2>Panel Claims</h2><p>Split claims can be entered on any date, including dates when the patient did not attend.</p></div><button class="primary" onclick="openClaimModal()">＋ Add Claim</button></div><div class="card-body"><div class="finance-grid" id="claimSummary"></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Claim Date</th><th>Related Visit</th><th>Claim Amount</th><th>Notes</th><th></th></tr></thead><tbody id="claimRows"></tbody></table></div></section>
+
+  <section id="sec-files" class="card" style="display:none;margin-top:14px"><div class="card-head"><div><h2>Files & Photos</h2><p>Files and photos attached to visits.</p></div></div><div id="secFilesContent"></div></section>
+`);
+
+const secFilesContent=document.getElementById("secFilesContent");
+refresh();
+
+/* =========================================================
+   BACKGROUND SYNC -> IN-PLACE REFRESH
+
+   refresh() re-reads the patient and rewrites only the inner
+   containers. It does NOT touch the tab strip, the open
+   section, the modals or any form field, so the active tab
+   (Overview / Visits / Body Composition / Files & Photos /
+   Appointments / Panel Claims) survives a background sync.
+
+   If a modal is open -- Add Visit, Edit Visit, Edit Patient,
+   Add Claim, Profile Photo -- the guard in app.js defers this
+   callback entirely and replays it once the modal closes, so a
+   half-typed visit is never overwritten.
+========================================================= */
+
+getwellOnDataUpdated(() => {
+  const current = getPatient(id);
+  if(!current) return;   /* deleted elsewhere: leave the page as it is */
+  refresh();
+});
+
+
+/* =========================================================
+   RESPONSIVE CHART REDRAW
+
+   The progress charts pick their viewBox from the window
+   width (phone / tablet / desktop) so the axis labels stay
+   readable. Only a change of band redraws them, so dragging a
+   window edge does not re-render on every pixel, and rotating
+   a phone does.
+
+   Nothing else on the page is touched, and no data is read
+   or written here.
+========================================================= */
+
+let progressChartBand = getwellChartBand();
+let progressChartResizeTimer = null;
+
+window.addEventListener("resize", () => {
+  clearTimeout(progressChartResizeTimer);
+  progressChartResizeTimer = setTimeout(() => {
+    const band = getwellChartBand();
+    if(band === progressChartBand) return;
+    progressChartBand = band;
+    getwellChartPointOut();
+    renderWeightProgress();
+    renderBodyCompositionProgress();
+  }, 160);
+});
+
+/* A Settings change alters the Visit Type and charge dropdowns
+   the visit form builds, so re-render those lists too. */
+getwellOnSettingsUpdated(() => {
+  if(!getPatient(id)) return;
+  refresh();
+});
+
+if(params.get("openClaim")==="1"){
+  setTimeout(()=>{
+    showSection("claims",document.querySelector('.patient-tabs button[data-tab="claims"]'));
+    openClaimModal();
+  },150);
+}
+</script>
+</body>
+</html>

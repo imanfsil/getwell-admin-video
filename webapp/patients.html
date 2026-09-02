@@ -1,0 +1,285 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Patients | Getwell</title><link rel="stylesheet" href="styles.css?v=20260831-bodycomp"><script src="app.js?v=20260831-bodycomp"></script><style>
+#addPatientModal.modal-wrap{display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(17,24,39,.48);pointer-events:none;}
+#addPatientModal.modal-wrap.show{display:flex!important;pointer-events:auto!important;}
+#addPatientModal .modal{pointer-events:auto;}
+</style></head><body><div id="root"></div>
+<div class="modal-wrap" id="addPatientModal"><div class="modal"><div class="modal-head"><div><h2>Add Patient</h2><p>Create a new patient record.</p></div><button id="closeAddTop" class="modal-close" type="button">×</button></div><div class="modal-body"><div class="form-grid">
+<div class="form-group"><label>Full Name</label><input id="pName"></div>
+<div class="form-group"><label>Patient ID</label><input id="pId" readonly placeholder="Auto-generated"></div>
+<div class="form-group"><label>Phone</label><input id="pPhone"></div>
+<div class="form-group"><label>Date of Birth</label><input id="pDob" type="date"></div>
+<div class="form-group"><label>Gender</label><select id="pGender"><option value="">Select</option><option>Male</option><option>Female</option></select></div>
+<div class="form-group"><label>Height (cm)</label><input id="pHeight" type="number"></div>
+<div class="form-group"><label>Starting Weight (kg)</label><input id="pStart" type="number"></div>
+<div class="form-group"><label>Goal Weight (kg)</label><input id="pGoal" type="number"></div>
+<div class="form-group"><label>Program Start Date</label><input id="pStartDate" type="date"></div>
+<div class="form-group"><label>Panel / Payment</label><select id="pPanel"></select></div>
+<div class="form-group"><label>Doctor</label><select id="pDoctor"><option value="">Select doctor</option></select></div>
+</div></div><div class="modal-foot"><button id="closeAddButton" class="secondary" type="button">Cancel</button><button id="savePatientButton" class="primary" type="button">Save Patient</button></div></div></div>
+<script>
+function renderPatientFormOptions(){
+  const panelSelect = document.getElementById("pPanel");
+  if(panelSelect){
+    panelSelect.innerHTML = getwellPanelOptions()
+      .map(panel => `<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.name)}</option>`)
+      .join("");
+    panelSelect.value = "SELF_PAY";
+  }
+  const doctorSelect = document.getElementById("pDoctor");
+  if(doctorSelect){
+    doctorSelect.innerHTML =
+      `<option value="">Select doctor</option>` +
+      getwellDoctorOptions()
+        .map(doctor => `<option value="${escapeHtml(doctor.name)}">${escapeHtml(doctor.name)}</option>`)
+        .join("");
+  }
+}
+
+/*
+  Patient IDs now come from Settings -> Patient Management
+  (prefix, digit width and next number) instead of being
+  hardcoded to GW-0000. getwellAllocatePatientId() also skips
+  any number already present in the store so an ID is never
+  handed out twice.
+*/
+function generatePatientId(){
+  return getwellAllocatePatientId().id;
+}
+
+/*
+  The Patient ID field used to get its colours from an inline
+  style set here (background:#f8fafc). An inline style beats
+  the stylesheet, so in dark mode the field stayed near-white
+  while its text went near-white too -- roughly 1:1 contrast,
+  i.e. invisible.
+
+  Colours now live in styles.css (#pId), which is theme-aware.
+  Only the non-visual hint stays here.
+*/
+function styleGeneratedPatientId(){
+  const el=document.getElementById("pId");
+  if(!el) return;
+  el.title="Patient ID is generated automatically";
+}
+
+function openAdd(){
+  renderPatientFormOptions();
+  document.getElementById("addPatientModal").classList.add("show");
+  document.getElementById("pId").value=generatePatientId();
+  styleGeneratedPatientId();
+  /*
+    getwellTodayKey() reads the LOCAL calendar day.
+    new Date().toISOString().slice(0,10) returned yesterday
+    between midnight and 8am in Malaysia (GMT+8).
+  */
+  document.getElementById("pStartDate").value=getwellTodayKey();
+}
+
+function closeAdd(){
+  document.getElementById("addPatientModal").classList.remove("show");
+}
+
+/*
+  ROOT CAUSE OF "A NEW PATIENT DOES NOT LOAD CORRECTLY"
+  ---------------------------------------------------------
+  upsertPatient() is ASYNCHRONOUS. It writes to localStorage
+  straight away, but the Google Sheets round-trip it returns a
+  promise for was never awaited: this function called it and
+  immediately did
+
+      location.href = "patient-profile.html?patient=..."
+
+  The navigation tore down the page while the fetch to Apps
+  Script was still in flight, so the write was cancelled and
+  the patient never reached the Sheet. The profile page then
+  opened, its 30-second sync read a Sheet snapshot that did not
+  contain the new patient, and the record stayed half-present
+  until somebody opened Edit Patient and saved it a second
+  time -- which is exactly the workaround that was being used.
+
+  savePatient() is now async and AWAITS the save. There is no
+  timer and no arbitrary delay anywhere: the profile opens
+  because the write genuinely finished.
+
+  Offline behaviour is unchanged. saveStore() always commits to
+  localStorage first and reports a failed remote write through
+  the application's existing notification, so a clinic with no
+  connection still gets a working local record and a visible
+  warning rather than a silent success.
+*/
+async function savePatient(){
+  const pNameEl=document.getElementById("pName");
+  const pPhoneEl=document.getElementById("pPhone");
+  const pDobEl=document.getElementById("pDob");
+  const pGenderEl=document.getElementById("pGender");
+  const pHeightEl=document.getElementById("pHeight");
+  const pStartEl=document.getElementById("pStart");
+  const pGoalEl=document.getElementById("pGoal");
+  const pStartDateEl=document.getElementById("pStartDate");
+  const pPanelEl=document.getElementById("pPanel");
+  const pDoctorEl=document.getElementById("pDoctor");
+
+  const name=String(pNameEl?.value||"").trim();
+  if(!name){alert("Please enter the patient name.");return}
+
+  const allocation=getwellAllocatePatientId();
+  const id=allocation.id;
+  const sw=Number(pStartEl?.value||0)||0;
+  const pv=normalizePanelType(pPanelEl?.value||"SELF_PAY");
+  const nm=name.split(/\s+/).map(x=>x[0]).join("").slice(0,2).toUpperCase();
+
+  const p={
+    id,name,initials:nm,status:getwellDefaultPatientStatus(),
+    panelProvider:pv,otherPanelName:"",
+    panelStatus:"Active",panelSuspensionNote:"",
+    phone:pPhoneEl?.value||"",
+    /* Date-only fields keep the exact string the date picker
+       produced. No Date object, no toISOString(), no shift. */
+    dob:getwellDateKey(pDobEl?.value||""),
+    gender:pGenderEl?.value||"",
+    height:pHeightEl?.value||"",startingWeight:sw,currentWeight:sw,
+    goalWeight:Number(pGoalEl?.value||0)||0,
+    startDate:getwellDateKey(pStartDateEl?.value||"")||getwellTodayKey(),
+    doctor:pDoctorEl?.value||"",
+    visits:[],claims:[],appointments:[],measurements:[]
+  };
+
+  const button=document.getElementById("savePatientButton");
+  const originalLabel=button?button.textContent:"";
+  if(button){
+    button.disabled=true;
+    button.textContent="Saving…";
+  }
+
+  let saveResult;
+
+  try{
+    /* THE FIX: wait for the record to be persisted locally AND
+       pushed to Google Sheets before going anywhere. */
+    saveResult=await upsertPatient(p);
+  }catch(error){
+    console.error("Unable to save the new patient:",error);
+    saveResult={ok:false,error:error?.message||"Unexpected error while saving."};
+  }finally{
+    if(button){
+      button.disabled=false;
+      button.textContent=originalLabel;
+    }
+  }
+
+  /* The ID series only advances once the record actually exists. */
+  getwellAdvancePatientNumber(allocation.number);
+
+  getwellLogActivity(
+    "Add",
+    "Patient",
+    `${p.id} · ${p.name}`,
+    `Panel: ${getPanelName(p)} · Doctor: ${p.doctor||"—"}`
+  );
+
+  /*
+    saveStore() has already raised its own error toast if the
+    Sheets write failed, so this only confirms the good case.
+    The record is committed locally either way, which is what
+    keeps the app usable with no connection.
+  */
+  if(saveResult && saveResult.ok === false){
+    /*
+      saveStore() has already explained WHY. The record stays in
+      this browser and in the outbox so it is retried, but it is
+      not described as saved, and the profile is not opened as
+      though the Sheet were holding it.
+    */
+    getwellNotify(
+      `Patient ${p.id} is NOT in Google Sheets yet. It is kept on this device and will be retried.`,
+      "error"
+    );
+    closeAdd();
+    renderPatients();
+    return;
+  }
+
+  getwellNotify(`Patient ${p.id} saved to Google Sheets.`,"success");
+
+  closeAdd();
+
+  /* Verify the record can genuinely be read back before opening it. */
+  if(!getPatient(p.id)){
+    getwellNotify("The patient could not be read back after saving. Please try again.","error");
+    renderPatients();
+    return;
+  }
+
+  location.href="patient-profile.html?patient="+encodeURIComponent(p.id);
+}
+
+function renderPatients(q=""){
+  const all = (typeof store === "function" ? (store().patients || []) : []);
+  const search = String(q || "").toLowerCase();
+  const ps = all.filter(p => (`${p.name||""} ${p.id||""} ${p.phone||""}`).toLowerCase().includes(search));
+  const rows = document.getElementById("patientRows");
+  const kpis = document.getElementById("patientKpis");
+  if(!rows || !kpis) return;
+  rows.innerHTML = ps.map(p => {
+    const v = typeof latestVisit === "function" ? latestVisit(p) : null;
+    const panelName = typeof getPanelName === "function" ? getPanelName(p) : (p.panelProvider || "Self-Pay");
+    return `<tr><td><div class="cell-patient"><span class="avatar-small">${getwellPatientAvatar(p)}</span><span class="cell-patient-text"><strong>${escapeHtml(p.name||"")}</strong><div class="row-sub">${escapeHtml(p.phone||"—")}</div></span></div></td><td>${escapeHtml(p.id||"")}</td><td><span class="panel-chip">${escapeHtml(panelName)}</span></td><td>${escapeHtml(p.currentWeight||"—")} kg</td><td>${escapeHtml(p.goalWeight||"—")} kg</td><td>${escapeHtml(getwellDateKey(v?.dateKey)||"—")}</td><td><span class="badge ${p.status==="Active"?"green":"gray"}">${escapeHtml(p.status||"")}</span></td><td><a class="secondary" style="padding:7px 9px" href="patient-profile.html?patient=${encodeURIComponent(p.id||"")}">Open →</a></td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="notif-empty">No patients found.</td></tr>`;
+  const panelCount = typeof patientUsesPanel === "function" ? all.filter(patientUsesPanel).length : 0;
+  kpis.innerHTML = `<div class="kpi"><div class="kpi-label">TOTAL PATIENTS</div><div class="kpi-value">${all.length}</div></div><div class="kpi"><div class="kpi-label">ACTIVE PATIENTS</div><div class="kpi-value">${all.filter(p=>p.status==="Active").length}</div></div><div class="kpi"><div class="kpi-label">PANEL PATIENTS</div><div class="kpi-value">${panelCount}</div></div><div class="kpi"><div class="kpi-label">INACTIVE</div><div class="kpi-value">${all.filter(p=>p.status==="Inactive").length}</div></div>`;
+}
+
+document.getElementById("root").innerHTML=shell("Patients","patients",`<div class="page-head"><div></div><button id="addPatientButton" class="primary" type="button">＋ Add Patient</button></div><div class="kpi-grid" id="patientKpis"></div><div class="card" style="margin-bottom:15px"><div class="card-body"><div class="form-group"><label>Search Patient</label><input id="patientSearch" class="claim-input" oninput="renderPatients(this.value)" placeholder="Search name, ID or phone"></div></div></div><div class="card"><div class="card-head"><div><h2>Patient List</h2><p>All patients use GW-XXXX IDs.</p></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Patient</th><th>ID</th><th>Panel / Payment</th><th>Current</th><th>Goal</th><th>Last Visit</th><th>Status</th><th></th></tr></thead><tbody id="patientRows"></tbody></table></div></div>`);
+
+window.openAdd = openAdd;
+window.closeAdd = closeAdd;
+window.savePatient = savePatient;
+
+const addPatientButton = document.getElementById("addPatientButton");
+const closeAddTop = document.getElementById("closeAddTop");
+const closeAddButton = document.getElementById("closeAddButton");
+const savePatientButton = document.getElementById("savePatientButton");
+if(addPatientButton) addPatientButton.addEventListener("click", openAdd);
+if(closeAddTop) closeAddTop.addEventListener("click", closeAdd);
+if(closeAddButton) closeAddButton.addEventListener("click", closeAdd);
+if(savePatientButton) savePatientButton.addEventListener("click", savePatient);
+
+renderPatients();
+if(typeof renderNotifications === "function") renderNotifications();
+
+/*
+  The Add New Patient card on the dashboard links to
+  patients.html?add=1 so it opens this existing modal rather
+  than duplicating the Add Patient workflow anywhere else.
+*/
+if(new URLSearchParams(location.search).get("add") === "1"){
+  openAdd();
+  history.replaceState(null, "", "patients.html");
+}
+
+/* =========================================================
+   BACKGROUND SYNC -> IN-PLACE REFRESH
+
+   The patient table and the KPI row are re-rendered from the
+   merged store. The search box keeps whatever was typed in it
+   and the filtered result is rebuilt from that same text, so
+   searching for "Mahmood" and waiting through a sync leaves
+   both the query and the filtered rows exactly as they were.
+
+   If the Add Patient modal is open the guard in app.js parks
+   this callback until it closes.
+========================================================= */
+
+getwellOnDataUpdated(() => {
+  const search = document.getElementById("patientSearch");
+  renderPatients(search ? search.value : "");
+  renderNotifications();
+});
+
+/* Panel / doctor / status lists come from Settings. */
+getwellOnSettingsUpdated(() => {
+  renderPatientFormOptions();
+  const search = document.getElementById("patientSearch");
+  renderPatients(search ? search.value : "");
+});
+</script></body></html>
