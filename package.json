@@ -1,0 +1,27 @@
+{
+  "name": "getwell-admin-promo",
+  "version": "1.0.0",
+  "description": "Remotion project that renders the Getwell Admin promotional video (1920x1080, 30fps, ~45s).",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "remotion studio src/index.ts",
+    "studio": "remotion studio src/index.ts",
+    "preview": "remotion studio src/index.ts",
+    "compositions": "remotion compositions src/index.ts",
+    "render": "remotion render src/index.ts GetwellAdminPromo out/getwell-admin-promo.mp4",
+    "build": "remotion bundle src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.520",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.520"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "typescript": "5.6.3"
+  }
+}
